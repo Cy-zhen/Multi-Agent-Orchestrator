@@ -1,0 +1,207 @@
+# Multi-Agent Orchestrator — Claude CLI + Antigravity
+
+> PM/Designer/General 由 Claude(Antigravity) 执行，FE 由 Gemini 执行，BE/QA 由 Codex 执行。
+> 状态机自动推进，用户只需 4 次介入。
+
+## 快速开始
+
+### 1. 安装
+
+```bash
+# 解压到 home 目录
+tar xzf orchestrator-bundle.tar.gz -C ~/
+
+# 验证
+ls ~/.claude/orchestrator.sh    # Claude CLI 侧
+ls ~/.gemini/GEMINI.md          # Antigravity 侧
+```
+
+### 2. 目录结构
+
+```
+~/.claude/                        ← Claude CLI 全局配置
+├── CLAUDE.md                     ← 全局编排规则
+├── orchestrator.sh               ← 核心编排脚本（支持 --ag 模式）
+├── logger.sh                     ← 日志系统
+├── checkpoint.sh                 ← 断点恢复
+├── setup-orchestrator.sh         ← 项目初始化
+├── agents/                       ← 6 个 Agent 角色定义
+│   ├── pm.md                     ← PM（Claude 执行）
+│   ├── designer.md               ← Designer（Claude 执行）
+│   ├── fe.md                     ← FE（Gemini 执行）
+│   ├── be.md                     ← BE（Codex 执行）
+│   ├── qa.md                     ← QA（Codex 执行）
+│   ├── general.md                ← General（Claude 执行）
+│   └── pm-references/            ← PM 参考文档
+├── orchestrator/                 ← 编排器核心
+│   ├── SKILL.md                  ← 完整编排技能定义
+│   ├── state-machine.md          ← 状态机说明
+│   ├── logging.md                ← 日志格式说明
+│   ├── skills/                   ← 子技能
+│   │   ├── determine-next-action.md
+│   │   ├── dispatch-agent.md
+│   │   └── run-chain.md
+│   ├── chains/                   ← 执行链模板
+│   │   ├── approve-prd.json
+│   │   ├── plan-approved.json
+│   │   └── qa-fix.json
+│   └── dispatch-templates/       ← Agent Prompt 模板
+│       ├── pm-generate-prd.txt
+│       ├── be-review-prd.txt
+│       ├── fe-review-prd.txt
+│       ├── designer-figma-prompt.txt
+│       ├── qa-prepare-tests.txt
+│       ├── qa-run-tests.txt
+│       ├── be-implementation.txt
+│       ├── fe-implementation.txt
+│       └── general-add-reflection.txt
+└── workflows/                    ← 工作流触发器
+    ├── start.md
+    ├── onboard.md
+    ├── approve.md
+    ├── resume.md
+    ├── set-state.md
+    └── status.md
+
+~/.gemini/                        ← Antigravity 全局配置
+├── GEMINI.md                     ← 编排角色定义 + 派发规则
+└── antigravity/skills/
+    └── multi-agent-orchestrator/
+        └── SKILL.md              ← Antigravity 编排技能
+```
+
+### 3. 使用方式
+
+#### 从 Claude CLI
+```bash
+claude  # 启动后直接描述需求，或：
+# /orchestrator-start ~/my-project
+# "approved"
+# "figma ready https://..."
+# "plan approved"
+```
+
+#### 从 Antigravity 客户端
+同样的交互方式，Antigravity 会：
+1. 调用 `orchestrator.sh --ag <command>` 管理工作流
+2. 收到 `CLAUDE_TASK_PENDING` 时自己执行 Claude 任务（PM/Designer/General）
+3. Codex/Gemini 任务由脚本内部调用
+
+### 4. 工作流（4 次用户介入）
+
+```
+① 描述概念 → PM 自动生成 PRD → 停在 PRD_DRAFT
+② "approved" → BE 审查 → FE 审查 → Designer 生成 Figma 提示词 → 停在 FIGMA_PROMPT
+③ "figma ready {url}" → QA 生成测试 → 出实现计划 → 停等 plan approved
+④ "plan approved" → FE+BE 并行编码 → QA 测试 → DONE
+```
+
+### 5. Agent 派发规则
+
+| Agent | 执行者 | 产出 |
+|-------|--------|------|
+| PM | Claude/Antigravity | doc/prd.md |
+| Designer | Claude/Antigravity | doc/figma-prompts.md |
+| General | Claude/Antigravity | doc/reflection.md |
+| FE | Gemini CLI | 前端代码 (.tsx/.css) |
+| BE | Codex CLI | 后端代码 (.go) |
+| QA | Codex CLI | 测试代码 + 测试执行 |
+
+### 6. 前置要求
+
+- **Claude CLI** (`claude`) — 已安装并登录
+- **Codex CLI** (`codex`) — 已安装并配置 API key
+- **Gemini CLI** (`gemini`) — 已安装并完成 OAuth
+- **jq** — JSON 处理
+- **Git** — Codex 需要 git repo
+
+---
+
+### 7. Onboard 已有项目
+
+> 适用于已开发的产品接入工作流，从现有代码反向生成文档。
+
+```bash
+# Claude CLI
+/orchestrator-onboard ~/my-existing-project
+
+# Antigravity
+"onboard ~/my-existing-project"
+```
+
+**Onboard 流程（2 步自动 + 1 步人工）:**
+
+```
+① Codex 扫描代码 → doc/code-scan.md (自动)
+② PM 反向生成 PRD → doc/prd.md (自动 / Antigravity 执行)
+③ 用户审阅 PRD → "approved" → 从 PRD_APPROVED 继续标准流程
+```
+
+| 场景 | 切入点 |
+|------|--------|
+| 已有产品 + 新功能 | PRD_APPROVED |
+| 已有产品 + 修 bug | `/set-state IMPLEMENTATION` |
+| 已有前端 + 新建后端 | PRD_APPROVED (标记 FE 完成) |
+| 已有后端 + 新建前端 | DESIGN_READY (标记 BE 完成) |
+
+---
+
+### 8. 项目级产出文件
+
+每个项目在 `{PROJECT_DIR}/doc/` 下自动产生以下文件（项目间完全隔离）：
+
+```
+{PROJECT_DIR}/doc/
+├── state.json                ← 工作流状态（当前阶段 + 元数据）
+├── idea.txt                  ← 用户概念描述
+├── code-scan.md              ← Codex 代码扫描报告（onboard 时）
+├── prd.md                    ← PM 生成的 PRD
+├── figma-prompts.md          ← Designer 生成的 Figma 提示词
+├── fe-plan.md                ← FE 审查 PRD 后的实现计划
+├── test-plan.md              ← QA 生成的测试计划
+├── reflection.md             ← General 反思分析（QA 失败时）
+├── .claude-task.md           ← [临时] Antigravity 模式的 prompt
+├── .claude-task-meta.json    ← [临时] 任务元数据 (agent/skill/next_state)
+├── checkpoint.json           ← [活跃链] 执行链断点（完成后删除）
+├── execution-plan.md         ← [活跃链] step-by-step 进度（完成后删除）
+└── logs/
+    ├── workflow.jsonl         ← 结构化日志（JSONL，机器可读）
+    ├── {date}.log            ← 人类可读日志（按天归档）
+    ├── summary.md            ← 追踪报告（状态卡片 + Agent 统计）
+    └── chains/               ← 已完成执行链归档
+        └── {chain}_{ts}.json
+```
+
+| 文件 | 产生者 | 时机 |
+|------|--------|------|
+| `state.json` | orchestrator.sh | init/onboard 创建，每次状态转换更新 |
+| `prd.md` | PM (Claude) | 生成或反向生成 PRD |
+| `code-scan.md` | Codex (BE) | onboard 扫描代码 |
+| `figma-prompts.md` | Designer (Claude) | PRD 批准后生成 |
+| `fe-plan.md` | FE (Gemini) | FE 审查 PRD 后 |
+| `test-plan.md` | QA (Codex) | Figma 完成后生成 |
+| `logs/workflow.jsonl` | logger.sh | 每个 Agent 操作时追加 |
+| `logs/summary.md` | logger.sh | 状态变化时重新渲染 |
+| `checkpoint.json` | checkpoint.sh | 执行链运行时，完成后清理 |
+
+`/status` 命令自动读取以上文件，输出：
+- 当前状态 + 节点类型
+- 最近 8 条执行历史（谁在什么时候干了什么）
+- 活跃执行链进度（如有）
+- 下一步建议
+
+### 9. 断点恢复
+
+新会话进入已有项目时，agent 会：
+1. 读 `doc/state.json` → 了解当前状态
+2. 读 `doc/logs/summary.md` → 了解执行历史
+3. 如有 `doc/checkpoint.json` → 从断点继续
+4. 否则 → 从当前状态的下一步开始
+
+```bash
+# 恢复执行
+/orchestrator-resume ~/my-project
+# 或
+"resume"
+```
+

@@ -1,0 +1,75 @@
+{
+  "name": "qa_fix",
+  "description": "QA 修复 Auto-Chain: 分析失败 → 生成反思 → FE/BE 修复 → 重新 QA",
+  "trigger": "QA_FAILED 且 reflection_count < 3",
+  "entry_state": "QA_FAILED",
+  "steps": [
+    {
+      "id": 1,
+      "name": "analyze_failures",
+      "node_type": "AUTO",
+      "action": "/add-reflection",
+      "agent": "general",
+      "cli": "claude",
+      "prompt_template": "general-add-reflection.txt",
+      "preconditions": ["QA 测试结果存在", "reflection_count < 3"],
+      "on_success": { "to_state": "IMPLEMENTATION", "increment": "reflection_count" }
+    },
+    {
+      "id": 2,
+      "name": "fe_fix",
+      "node_type": "AUTO",
+      "action": "/fix",
+      "agent": "fe",
+      "cli": "gemini",
+      "prompt_template": "fe-implementation.txt",
+      "preconditions": ["doc/reflection.md exists"],
+      "conditional": "fix_targets contains FE or BOTH",
+      "parallel_with": "be_fix"
+    },
+    {
+      "id": 3,
+      "name": "be_fix",
+      "node_type": "AUTO",
+      "action": "/fix",
+      "agent": "be",
+      "cli": "codex",
+      "prompt_template": "be-implementation.txt",
+      "preconditions": ["doc/reflection.md exists", "git repo initialized"],
+      "conditional": "fix_targets contains BE or BOTH",
+      "parallel_with": "fe_fix"
+    },
+    {
+      "id": 4,
+      "name": "sync_barrier",
+      "node_type": "AUTO",
+      "action": "sync_barrier",
+      "agent": "orchestrator",
+      "wait_for": ["fe_fix", "be_fix"],
+      "on_success": { "to_state": "QA_TESTING" }
+    },
+    {
+      "id": 5,
+      "name": "qa_retest",
+      "node_type": "AUTO",
+      "action": "/run-tests",
+      "agent": "qa",
+      "cli": "codex",
+      "prompt_template": "qa-run-tests.txt",
+      "on_success": { "to_state": "QA_PASSED" },
+      "on_failure": { "to_state": "QA_FAILED" }
+    },
+    {
+      "id": 6,
+      "name": "evaluate_result",
+      "node_type": "AUTO",
+      "action": "decision",
+      "agent": "orchestrator",
+      "branches": {
+        "qa_passed": { "to_state": "DONE", "finish_chain": true },
+        "qa_failed": { "trigger_chain": "qa-fix", "condition": "reflection_count < 3" },
+        "qa_failed_limit": { "stop_chain": true, "reason": "反思修复已达上限(3次)，需要人工介入" }
+      }
+    }
+  ]
+}

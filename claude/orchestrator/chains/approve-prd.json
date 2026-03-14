@@ -1,0 +1,63 @@
+{
+  "name": "approve_prd",
+  "description": "PRD 审批 Auto-Chain: BE 审查 → FE 审查 → Designer 生成 Figma 提示词",
+  "trigger": "用户输入 approved/通过/批准 (状态=PRD_DRAFT)",
+  "entry_state": "PRD_DRAFT",
+  "steps": [
+    {
+      "id": 1,
+      "name": "update_state_prd_review",
+      "node_type": "AUTO",
+      "action": "state_change",
+      "agent": "orchestrator",
+      "from_state": "PRD_DRAFT",
+      "to_state": "PRD_REVIEW"
+    },
+    {
+      "id": 2,
+      "name": "be_review_prd",
+      "node_type": "AUTO",
+      "action": "/review-prd",
+      "agent": "be",
+      "cli": "codex",
+      "prompt_template": "be-review-prd.txt",
+      "preconditions": ["doc/prd.md exists", "git repo initialized"],
+      "can_reject": true,
+      "on_success": { "to_state": "BE_APPROVED" },
+      "on_reject": { "to_state": "PRD_DRAFT", "stop_chain": true, "reason": "BE 审查不通过" }
+    },
+    {
+      "id": 3,
+      "name": "fe_review_prd",
+      "node_type": "AUTO",
+      "action": "/review-prd",
+      "agent": "fe",
+      "cli": "gemini",
+      "prompt_template": "fe-review-prd.txt",
+      "preconditions": ["doc/prd.md exists"],
+      "can_reject": true,
+      "on_success": { "to_state": "PRD_APPROVED" },
+      "on_reject": { "to_state": "PRD_DRAFT", "stop_chain": true, "reason": "FE 审查不通过" }
+    },
+    {
+      "id": 4,
+      "name": "designer_figma_prompt",
+      "node_type": "AUTO",
+      "action": "/generate-figma-prompt",
+      "agent": "designer",
+      "cli": "claude",
+      "prompt_template": "designer-figma-prompt.txt",
+      "preconditions": ["doc/prd.md exists", "state == PRD_APPROVED"],
+      "on_success": { "to_state": "FIGMA_PROMPT" }
+    },
+    {
+      "id": 5,
+      "name": "wait_figma_design",
+      "node_type": "USER_GATE",
+      "action": "wait",
+      "agent": "orchestrator",
+      "hint": "Figma 设计完成后说 'figma ready {url}'",
+      "expected_signals": ["figma ready"]
+    }
+  ]
+}
