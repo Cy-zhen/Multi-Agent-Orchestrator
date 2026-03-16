@@ -251,6 +251,138 @@ cmd_transition() {
   set_state "$to_state"
 }
 
+# ---------- CLI 回退执行函数 ----------
+# run_with_fallback <cli> <prompt> <agent> [state] [skill] [template]
+# 先尝试指定 CLI，失败后回退到 Claude/Antigravity
+# 返回: 0=成功, 1=失败
+# 输出存入全局变量 FALLBACK_OUTPUT
+FALLBACK_OUTPUT=""
+run_with_fallback() {
+  local cli="$1"
+  local prompt="$2"
+  local agent="${3:-unknown}"
+  local state="${4:-}"
+  local skill="${5:-}"
+  local template="${6:-}"
+
+  local output=""
+  local exit_code=0
+
+  # --- 第一轮：尝试原始 CLI ---
+  case "$cli" in
+    claude)
+      if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+        # Antigravity 模式: 直接走 CLAUDE_TASK_PENDING
+        _emit_claude_task_pending "$prompt" "$agent" "$state" "$skill" "$template"
+        return 99  # 特殊返回码：表示已写 TASK_PENDING，需要调用方退出
+      fi
+      echo -e "${YELLOW}执行 Claude CLI...${NC}"
+      output=$(claude -p "$prompt" --output-format json 2>&1) || exit_code=$?
+      ;;
+    codex)
+      if which codex >/dev/null 2>&1; then
+        echo -e "${YELLOW}执行 Codex CLI...${NC}"
+        output=$(codex exec --full-auto "$prompt" 2>&1) || exit_code=$?
+      else
+        echo -e "${YELLOW}Codex CLI 不可用${NC}"
+        exit_code=1
+      fi
+      ;;
+    gemini)
+      if which gemini >/dev/null 2>&1; then
+        echo -e "${YELLOW}执行 Gemini CLI...${NC}"
+        output=$(gemini -p "$prompt" --yolo 2>&1) || exit_code=$?
+      else
+        echo -e "${YELLOW}Gemini CLI 不可用${NC}"
+        exit_code=1
+      fi
+      ;;
+    *)
+      echo -e "${RED}未知 CLI: ${cli}${NC}"
+      exit_code=1
+      ;;
+  esac
+
+  # --- 成功则直接返回 ---
+  if [[ $exit_code -eq 0 ]]; then
+    echo -e "${GREEN}✓ ${cli} 执行成功${NC}"
+    FALLBACK_OUTPUT="$output"
+    return 0
+  fi
+
+  # --- 第二轮：回退到 Claude/Antigravity ---
+  # 只对 gemini/codex 失败进行回退 (claude 失败不回退)
+  if [[ "$cli" == "claude" ]]; then
+    echo -e "${RED}✗ Claude CLI 执行失败 (exit: ${exit_code})${NC}"
+    FALLBACK_OUTPUT="$output"
+    return $exit_code
+  fi
+
+  echo -e "${YELLOW}⚠ ${cli} 执行失败 (exit: ${exit_code})，启动回退...${NC}"
+  if [[ -x "$LOGGER" ]]; then
+    bash "$LOGGER" warn "${cli} 失败(exit=${exit_code})，回退到 Claude" "orchestrator" 2>/dev/null || true
+  fi
+
+  if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+    # Antigravity 模式: 写任务文件让调用方执行
+    _emit_claude_task_pending "$prompt" "$agent" "$state" "$skill" "$template"
+    return 99  # 特殊返回码
+  fi
+
+  # CLI 模式: 回退到 claude -p
+  echo -e "${YELLOW}回退: 使用 Claude CLI 执行 ${agent} 任务...${NC}"
+  output=""
+  exit_code=0
+  output=$(claude -p "$prompt" --output-format json 2>&1) || exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    echo -e "${GREEN}✓ Claude CLI 回退执行成功${NC}"
+  else
+    echo -e "${RED}✗ Claude CLI 回退也失败 (exit: ${exit_code})${NC}"
+  fi
+
+  FALLBACK_OUTPUT="$output"
+  return $exit_code
+}
+
+# 写 CLAUDE_TASK_PENDING 文件 (内部辅助函数)
+_emit_claude_task_pending() {
+  local prompt="$1"
+  local agent="${2:-}"
+  local state="${3:-}"
+  local skill="${4:-}"
+  local template="${5:-}"
+  local nxt
+  nxt=$(next_state "$state" true 2>/dev/null || echo "")
+
+  local task_file="${PROJECT_DIR}/doc/.claude-task.md"
+  echo "$prompt" > "$task_file"
+
+  cat > "${PROJECT_DIR}/doc/.claude-task-meta.json" << META
+{
+  "state": "${state}",
+  "agent": "${agent}",
+  "skill": "${skill}",
+  "template": "${template}",
+  "next_state": "${nxt}"
+}
+META
+
+  echo ""
+  echo -e "${YELLOW}══════════════════════════════════════${NC}"
+  echo -e "${YELLOW}  CLAUDE_TASK_PENDING${NC}"
+  echo -e "${YELLOW}══════════════════════════════════════${NC}"
+  echo -e "Agent: ${agent} | Skill: ${skill}"
+  echo -e "Prompt 已写入: ${task_file}"
+  echo -e "下一状态: ${nxt}"
+  echo -e ""
+  echo -e "请你(Antigravity)作为 Claude 执行以下任务:"
+  echo -e "1. 读取 ${task_file} 中的 prompt"
+  echo -e "2. 按照 prompt 的要求执行任务"
+  echo -e "3. 完成后运行: orchestrator.sh auto-run --ag ${PROJECT_DIR}"
+  echo -e "${YELLOW}══════════════════════════════════════${NC}"
+}
+
 # ---------- COMMAND: dispatch ----------
 cmd_dispatch() {
   local agent="${1:-}"
@@ -284,26 +416,15 @@ cmd_dispatch() {
   echo -e "${CYAN}模板: ${template}${NC}"
   echo ""
 
-  # 执行
-  local output
-  local exit_code=0
-  case "$cli" in
-    claude)
-      echo -e "${YELLOW}执行 Claude...${NC}"
-      output=$(claude -p "$prompt" --output-format json 2>&1) || exit_code=$?
-      ;;
-    codex)
-      echo -e "${YELLOW}执行 Codex...${NC}"
-      output=$(codex exec --full-auto "$prompt" 2>&1) || exit_code=$?
-      ;;
-    gemini)
-      echo -e "${YELLOW}执行 Gemini...${NC}"
-      output=$(gemini -p "$prompt" --yolo 2>&1) || exit_code=$?
-      ;;
-    *)
-      die "未知 CLI: ${cli}"
-      ;;
-  esac
+  # 执行（带回退）
+  cd "$PROJECT_DIR"
+  run_with_fallback "$cli" "$prompt" "$agent" "$state" "$skill" "$template"
+  local exit_code=$?
+
+  if [[ $exit_code -eq 99 ]]; then
+    # CLAUDE_TASK_PENDING
+    return 0
+  fi
 
   # 输出
   if [[ $exit_code -eq 0 ]]; then
@@ -311,7 +432,7 @@ cmd_dispatch() {
   else
     echo -e "${RED}✗ 执行失败 (exit code: ${exit_code})${NC}"
   fi
-  echo "$output"
+  echo "$FALLBACK_OUTPUT"
 
   # 日志
   if [[ -x "$LOGGER" ]]; then
@@ -462,17 +583,34 @@ cmd_onboard() {
     bash "$LOGGER" agent_start "Codex 扫描代码结构" "be" 2>/dev/null || true
   fi
 
+  local scan_exit=0
   if which codex >/dev/null 2>&1; then
     echo -e "${YELLOW}执行 Codex 扫描...${NC}"
     cd "$PROJECT_DIR"
-    codex exec --full-auto "$scan_prompt" 2>&1 || echo -e "${RED}Codex 扫描失败，继续...${NC}"
-    if [[ -x "$LOGGER" ]]; then
-      bash "$LOGGER" agent_done "代码扫描完成" "be" 2>/dev/null || true
+    codex exec --full-auto "$scan_prompt" 2>&1 || scan_exit=$?
+    if [[ $scan_exit -eq 0 ]]; then
+      if [[ -x "$LOGGER" ]]; then
+        bash "$LOGGER" agent_done "代码扫描完成" "be" 2>/dev/null || true
+      fi
+    else
+      echo -e "${YELLOW}⚠ Codex 扫描失败 (exit: ${scan_exit})，回退到 Claude 扫描...${NC}"
+      if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+        echo -e "${YELLOW}Antigravity 模式: 跳过自动扫描，由你手动完成${NC}"
+      elif which claude >/dev/null 2>&1; then
+        claude -p "$scan_prompt" --output-format json 2>&1 || echo -e "${RED}Claude 扫描也失败，继续...${NC}"
+      fi
     fi
   else
-    echo -e "${YELLOW}Codex 不可用，跳过自动扫描${NC}"
+    echo -e "${YELLOW}Codex 不可用，尝试 Claude 扫描...${NC}"
+    if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+      echo -e "${YELLOW}Antigravity 模式: 跳过自动扫描，由你手动完成${NC}"
+    elif which claude >/dev/null 2>&1; then
+      claude -p "$scan_prompt" --output-format json 2>&1 || echo -e "${RED}Claude 扫描也失败，继续...${NC}"
+    else
+      echo -e "${YELLOW}无可用 CLI，跳过自动扫描${NC}"
+    fi
     if [[ -x "$LOGGER" ]]; then
-      bash "$LOGGER" warn "Codex 不可用，跳过扫描" "orchestrator" 2>/dev/null || true
+      bash "$LOGGER" warn "Codex 不可用，已回退" "orchestrator" 2>/dev/null || true
     fi
   fi
 
@@ -490,15 +628,8 @@ cmd_onboard() {
   local prd_prompt="你是 PM Agent。基于以下代码扫描结果，反向生成产品需求文档(PRD)。\n\n代码扫描结果:\n${code_scan}\n\n要求：\n1. 列出已实现功能（从代码推导）\n2. 技术栈信息\n3. 待确认项（产品目标/商业指标留空）\n4. 本期新增功能（留空让用户补充）\n5. 写入文件: ${PROJECT_DIR}/doc/prd.md\n\n输出 JSON: {\"success\": true, \"agent\": \"PM\", \"summary\": \"PRD 摘要\"}"
 
   if [[ "$DRIVER_MODE" == "antigravity" ]]; then
-    # Antigravity 模式：写 prompt 到文件，让调用方自己执行
-    local task_file="${PROJECT_DIR}/doc/.claude-task.md"
-    echo "$prd_prompt" > "$task_file"
-    cat > "${PROJECT_DIR}/doc/.claude-task-meta.json" << META
-{"state": "IDEA", "agent": "PM", "skill": "/generate-prd", "next_state": "PRD_DRAFT"}
-META
-    echo -e "${YELLOW}CLAUDE_TASK_PENDING: PRD 生成任务已写入 ${task_file}${NC}"
-    echo -e "请你(Antigravity)读取上述文件并执行 PRD 生成。"
-    echo -e "完成后将 PRD 写入 ${PROJECT_DIR}/doc/prd.md"
+    # Antigravity 模式：使用统一的 _emit_claude_task_pending 辅助函数
+    _emit_claude_task_pending "$prd_prompt" "PM" "IDEA" "/generate-prd" "pm-generate-prd.txt"
   elif which claude >/dev/null 2>&1; then
     echo -e "${YELLOW}执行 Claude PM...${NC}"
     claude -p "$prd_prompt" --output-format json 2>&1 || echo -e "${RED}Claude PM 失败${NC}"
@@ -652,22 +783,69 @@ cmd_auto_run() {
 
           rm -rf "$tmpdir"
 
-          if [[ "$fe_ok" == false && "$be_ok" == false ]]; then
-            echo -e "${RED}FE + BE 都失败，停止${NC}"
+          # --- 回退逻辑：Gemini/Codex 失败时用 Claude 补救 ---
+          local need_fe_fallback=false need_be_fallback=false
+          [[ "$fe_ok" == false ]] && need_fe_fallback=true
+          [[ "$be_ok" == false ]] && need_be_fallback=true
+
+          if [[ "$need_fe_fallback" == true || "$need_be_fallback" == true ]]; then
+            echo -e "${YELLOW}⚠ 检测到失败任务，启动 Claude/Antigravity 回退...${NC}"
             if [[ -x "$LOGGER" ]]; then
-              bash "$LOGGER" chain_break "FE+BE 并行执行失败" "orchestrator" 2>/dev/null || true
+              bash "$LOGGER" warn "并行执行部分失败: FE(ok=$fe_ok) BE(ok=$be_ok)，启动回退" "orchestrator" 2>/dev/null || true
+            fi
+
+            if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+              # Antigravity 模式：写 TASK_PENDING，一次只能一个
+              # 优先回退 FE（因为后续 BE 也会回退）
+              if [[ "$need_fe_fallback" == true ]]; then
+                echo -e "${YELLOW}Gemini FE 失败，回退到 Antigravity 执行 FE 任务${NC}"
+                _emit_claude_task_pending "$fe_prompt" "FE" "$state" "/figma-to-code" "fe-implementation.txt"
+                # 如果 BE 也失败，写入提示让用户知道还需要回退 BE
+                if [[ "$need_be_fallback" == true ]]; then
+                  echo -e "${YELLOW}注意: BE 也需要回退。FE 完成后请再次运行 auto-run 触发 BE 回退。${NC}"
+                  # 把 BE 需要回退的信息写入 state
+                  local tmp; tmp=$(mktemp)
+                  jq '.pending_be_fallback = true' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+                fi
+                return 0
+              elif [[ "$need_be_fallback" == true ]]; then
+                echo -e "${YELLOW}Codex BE 失败，回退到 Antigravity 执行 BE 任务${NC}"
+                _emit_claude_task_pending "$be_prompt" "BE" "$state" "/figma-to-code" "be-implementation.txt"
+                return 0
+              fi
+            else
+              # CLI 模式：串行回退（Claude 不能并行）
+              if [[ "$need_fe_fallback" == true ]]; then
+                echo -e "${YELLOW}Gemini FE 失败，回退到 Claude CLI 串行执行 FE...${NC}"
+                local fe_fallback_output
+                fe_fallback_output=$(claude -p "$fe_prompt" --output-format json 2>&1) && fe_ok=true || fe_ok=false
+                [[ "$fe_ok" == true ]] && echo -e "${GREEN}✓ FE Claude 回退成功${NC}" || echo -e "${RED}✗ FE Claude 回退也失败${NC}"
+              fi
+              if [[ "$need_be_fallback" == true ]]; then
+                echo -e "${YELLOW}Codex BE 失败，回退到 Claude CLI 串行执行 BE...${NC}"
+                local be_fallback_output
+                be_fallback_output=$(claude -p "$be_prompt" --output-format json 2>&1) && be_ok=true || be_ok=false
+                [[ "$be_ok" == true ]] && echo -e "${GREEN}✓ BE Claude 回退成功${NC}" || echo -e "${RED}✗ BE Claude 回退也失败${NC}"
+              fi
+            fi
+          fi
+
+          if [[ "$fe_ok" == false && "$be_ok" == false ]]; then
+            echo -e "${RED}FE + BE 都失败（含回退），停止${NC}"
+            if [[ -x "$LOGGER" ]]; then
+              bash "$LOGGER" chain_break "FE+BE 并行+回退执行失败" "orchestrator" 2>/dev/null || true
             fi
             return 1
           fi
 
           if [[ -x "$LOGGER" ]]; then
-            bash "$LOGGER" agent_done "FE+BE 并行完成: FE(ok=$fe_ok) BE(ok=$be_ok)" "orchestrator" 2>/dev/null || true
+            bash "$LOGGER" agent_done "FE+BE 完成(含回退): FE(ok=$fe_ok) BE(ok=$be_ok)" "orchestrator" 2>/dev/null || true
           fi
           set_state "QA_TESTING" "implementation_done" "FE(ok=$fe_ok) BE(ok=$be_ok)"
           continue
         fi
 
-        # === 串行执行 ===
+        # === 串行执行（带回退） ===
         echo -e "${BLUE}═══ 派发: ${agent} → ${cli} ═══${NC}"
 
         # 日志：agent 开始
@@ -688,64 +866,20 @@ cmd_auto_run() {
           prompt="执行 ${skill} 任务，项目目录: ${PROJECT_DIR}"
         fi
 
-        local output=""
-        local exit_code=0
         cd "$PROJECT_DIR"
 
-        case "$cli" in
-          claude)
-            if [[ "$DRIVER_MODE" == "antigravity" ]]; then
-              # Antigravity 模式：调用方就是 Claude，不要再调 claude -p
-              # 把 prompt 写到文件，让调用方自己执行
-              local task_file="${PROJECT_DIR}/doc/.claude-task.md"
-              echo "$prompt" > "$task_file"
+        # 使用 run_with_fallback 执行（自动处理回退）
+        run_with_fallback "$cli" "$prompt" "$agent" "$state" "$skill" "$template"
+        local exit_code=$?
 
-              # 写元数据
-              cat > "${PROJECT_DIR}/doc/.claude-task-meta.json" << META
-{
-  "state": "${state}",
-  "agent": "${agent}",
-  "skill": "${skill}",
-  "template": "${template}",
-  "next_state": "$(next_state "$state" true)"
-}
-META
-
-              echo ""
-              echo -e "${YELLOW}══════════════════════════════════════${NC}"
-              echo -e "${YELLOW}  CLAUDE_TASK_PENDING${NC}"
-              echo -e "${YELLOW}══════════════════════════════════════${NC}"
-              echo -e "Agent: ${agent} | Skill: ${skill}"
-              echo -e "Prompt 已写入: ${task_file}"
-              echo -e "下一状态: $(next_state "$state" true)"
-              echo -e ""
-              echo -e "请你(Antigravity)作为 Claude 执行以下任务:"
-              echo -e "1. 读取 ${task_file} 中的 prompt"
-              echo -e "2. 按照 prompt 的要求执行任务"
-              echo -e "3. 完成后运行: orchestrator.sh auto-run --ag ${PROJECT_DIR}"
-              echo -e "${YELLOW}══════════════════════════════════════${NC}"
-              return 0  # 正常退出，等 Antigravity 处理
-            fi
-            echo -e "${YELLOW}执行 Claude CLI...${NC}"
-            output=$(claude -p "$prompt" --output-format json 2>&1) || exit_code=$?
-            ;;
-          codex)
-            echo -e "${YELLOW}执行 Codex CLI...${NC}"
-            output=$(codex exec --full-auto "$prompt" 2>&1) || exit_code=$?
-            ;;
-          gemini)
-            echo -e "${YELLOW}执行 Gemini CLI...${NC}"
-            output=$(gemini -p "$prompt" --yolo 2>&1) || exit_code=$?
-            ;;
-          *)
-            echo -e "${RED}未知 CLI: ${cli}，跳过${NC}"
-            exit_code=1
-            ;;
-        esac
+        if [[ $exit_code -eq 99 ]]; then
+          # CLAUDE_TASK_PENDING — 正常退出，等 Antigravity 处理
+          return 0
+        fi
 
         if [[ $exit_code -ne 0 ]]; then
           echo -e "${RED}✗ Agent ${agent} 执行失败 (exit: ${exit_code})${NC}"
-          echo "$output" | tail -20
+          echo "$FALLBACK_OUTPUT" | tail -20
           if [[ -x "$LOGGER" ]]; then
             bash "$LOGGER" chain_break "${agent} 执行失败: exit ${exit_code}" "orchestrator" 2>/dev/null || true
           fi
@@ -759,8 +893,8 @@ META
 
         # 解析 approved 字段
         local approved="true"
-        if echo "$output" | jq -e '.approved' >/dev/null 2>&1; then
-          approved=$(echo "$output" | jq -r '.approved')
+        if echo "$FALLBACK_OUTPUT" | jq -e '.approved' >/dev/null 2>&1; then
+          approved=$(echo "$FALLBACK_OUTPUT" | jq -r '.approved')
         fi
 
         # 状态转换
