@@ -1,0 +1,17 @@
+agent: QA
+max_inject_tokens: 2000
+
+skills:
+  - name: testing-strategy
+    file: testing-strategy.md
+    inject_mode: rules
+    inject_at: design          # ← Phase 3 (Design/Prepare) 时注入测试策略
+    trigger: always
+    description: "测试策略：测试金字塔、用例设计、覆盖率目标"
+
+  - name: qa-acceptance-criteria
+    file: qa-acceptance-criteria.md
+    inject_mode: summary
+    inject_at: analyze         # ← Phase 4 (Analyze) 时注入验收标准
+    trigger: always
+    description: "QA 验收标准：如何判定测试通过/失败"

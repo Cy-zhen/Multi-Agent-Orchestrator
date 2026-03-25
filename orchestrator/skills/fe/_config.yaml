@@ -1,0 +1,17 @@
+agent: FE
+max_inject_tokens: 2000
+
+skills:
+  - name: react-coding-rules
+    file: react-coding-rules.md
+    inject_mode: rules
+    inject_at: implement       # ← Phase 3 (Implement) 时注入编码规范
+    trigger: always
+    description: "React 19 编码规范：Server Components、Hooks 最佳实践"
+
+  - name: component-quality-checklist
+    file: component-quality-checklist.md
+    inject_mode: summary
+    inject_at: verify          # ← Phase 4 (Verify) 时注入自查清单
+    trigger: always
+    description: "组件质量清单：可访问性、响应式、错误状态"

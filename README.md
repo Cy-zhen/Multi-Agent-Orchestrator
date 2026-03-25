@@ -13,7 +13,6 @@ tar xzf orchestrator-bundle.tar.gz -C ~/
 
 # 验证
 ls ~/.claude/orchestrator.sh    # Claude CLI 侧
-ls ~/.gemini/GEMINI.md          # Antigravity 侧
 ```
 
 ### 2. 目录结构
@@ -33,19 +32,32 @@ ls ~/.gemini/GEMINI.md          # Antigravity 侧
 │   ├── qa.md                     ← QA（Codex 执行）
 │   ├── general.md                ← General（Claude 执行）
 │   └── pm-references/            ← PM 参考文档
-├── orchestrator/                 ← 编排器核心
+├── orchestrator/                 ← 编排器核心（v2 Python）
 │   ├── SKILL.md                  ← 完整编排技能定义
 │   ├── state-machine.md          ← 状态机说明
 │   ├── logging.md                ← 日志格式说明
-│   ├── skills/                   ← 子技能
+│   ├── state.py                  ← [v2] LangGraph 状态定义（TypedDict）
+│   ├── graph.py                  ← [v2] LangGraph StateGraph（11 节点）
+│   ├── orchestrator.py           ← [v2] Python 状态机编排器
+│   ├── tracing.py                ← [v2] LangSmith 可观测性
+│   ├── agents/                   ← [v2] Agent 基类
+│   │   └── base.py              ← BaseAgent + CLI 执行器
+│   ├── acceptance/               ← [v2] 验收系统
+│   │   └── checker.py           ← AcceptanceChecker（PM/FE/BE/QA/Designer）
+│   ├── skills/                   ← 技能系统
+│   │   ├── loader.py            ← [v2] SkillLoader（模板注入 + 渐进式披露）
 │   │   ├── determine-next-action.md
 │   │   ├── dispatch-agent.md
-│   │   └── run-chain.md
+│   │   ├── run-chain.md
+│   │   ├── pm/_config.yaml + 2 skills
+│   │   ├── fe/_config.yaml + 2 skills
+│   │   ├── be/_config.yaml + 2 skills
+│   │   └── qa/_config.yaml + 2 skills
 │   ├── chains/                   ← 执行链模板
 │   │   ├── approve-prd.json
 │   │   ├── plan-approved.json
 │   │   └── qa-fix.json
-│   └── dispatch-templates/       ← Agent Prompt 模板
+│   └── dispatch-templates/       ← [v2] 5-Phase ReAct Prompt 模板
 │       ├── pm-generate-prd.txt
 │       ├── be-review-prd.txt
 │       ├── fe-review-prd.txt
@@ -63,14 +75,22 @@ ls ~/.gemini/GEMINI.md          # Antigravity 侧
     ├── set-state.md
     └── status.md
 
-~/.gemini/                        ← Antigravity 全局配置
-├── GEMINI.md                     ← 编排角色定义 + 派发规则
-└── antigravity/skills/
-    └── multi-agent-orchestrator/
-        └── SKILL.md              ← Antigravity 编排技能
+项目仓库镜像/                      ← Git 跟踪用
+├── orchestrator/                 ← ~/.claude/orchestrator/ 的同步副本
+├── antigravity/
+│   └── GEMINI.md                 ← Gemini CLI 角色定义（FE Agent）
+├── claude/
+│   └── CLAUDE.md                 ← Claude CLI 角色定义（Orchestrator）
+└── doc/                          ← 进展文档
 ```
 
 ### 3. 使用方式
+
+#### 从 Antigravity 客户端（推荐）
+直接描述需求即可，Antigravity 会：
+1. 调用 `orchestrator.sh --ag <command>` 管理工作流
+2. 收到 `CLAUDE_TASK_PENDING` 时自己执行 Claude 任务（PM/Designer/General）
+3. Codex/Gemini 任务由脚本内部调用
 
 #### 从 Claude CLI
 ```bash
@@ -81,11 +101,13 @@ claude  # 启动后直接描述需求，或：
 # "plan approved"
 ```
 
-#### 从 Antigravity 客户端
-同样的交互方式，Antigravity 会：
-1. 调用 `orchestrator.sh --ag <command>` 管理工作流
-2. 收到 `CLAUDE_TASK_PENDING` 时自己执行 Claude 任务（PM/Designer/General）
-3. Codex/Gemini 任务由脚本内部调用
+#### LangGraph 版（v2 新增）
+```bash
+python3 ~/.claude/orchestrator/graph.py run <project_dir>       # 运行直到 USER_GATE
+python3 ~/.claude/orchestrator/graph.py resume <project_dir>    # 从 checkpoint 恢复
+python3 ~/.claude/orchestrator/graph.py visualize               # 输出 Mermaid 图
+python3 ~/.claude/orchestrator/graph.py status <project_dir>    # checkpoint + tracing 状态
+```
 
 ### 4. 工作流（4 次用户介入）
 
@@ -96,24 +118,46 @@ claude  # 启动后直接描述需求，或：
 ④ "plan approved" → FE+BE 并行编码 → QA 测试 → DONE
 ```
 
+### LangGraph 节点拓扑
+```
+PM → PM_UserReview → BE_Review →|approved| FE_Review →|approved| Designer
+                                 |rejected| PM          |rejected| PM
+Designer → Design_UserReview → QA_Prepare → Plan_UserReview → Implementation
+Implementation → QA_Test →|pass| END
+                          |fail| Reflection → Implementation (max 3x)
+```
+
 ### 5. Agent 派发规则
 
-| Agent | 执行者 | 产出 |
-|-------|--------|------|
-| PM | Claude/Antigravity | doc/prd.md |
-| Designer | Claude/Antigravity | doc/figma-prompts.md |
-| General | Claude/Antigravity | doc/reflection.md |
-| FE | Gemini CLI | 前端代码 (.tsx/.css) |
-| BE | Codex CLI | 后端代码 (.go) |
-| QA | Codex CLI | 测试代码 + 测试执行 |
+| Agent | 执行者 | CLI | 产出 |
+|-------|--------|-----|------|
+| PM | Claude/Antigravity | `claude -p` | doc/prd.md |
+| Designer | Claude/Antigravity | `claude -p` | doc/figma-prompts.md |
+| General | Claude/Antigravity | `claude -p` | doc/reflection.md |
+| FE | Gemini CLI | `gemini -p` | 前端代码 (.tsx/.css) |
+| BE | Codex CLI | `codex exec` | 后端代码 (.go) |
+| QA | Codex CLI | `codex exec` | 测试代码 + 测试执行 |
 
 ### 6. 前置要求
 
 - **Claude CLI** (`claude`) — 已安装并登录
 - **Codex CLI** (`codex`) — 已安装并配置 API key
 - **Gemini CLI** (`gemini`) — 已安装并完成 OAuth
+- **Python 3.10+** — LangGraph 版需要
 - **jq** — JSON 处理
 - **Git** — Codex 需要 git repo
+
+#### Python 依赖（v2）
+```bash
+pip install langgraph langsmith langchain-core
+```
+
+#### LangSmith 可观测性（可选）
+```bash
+export LANGSMITH_API_KEY="ls-xxxx"
+export LANGSMITH_PROJECT="multi-agent-orchestrator"
+export LANGSMITH_TRACING=true
+```
 
 ---
 
@@ -203,5 +247,21 @@ claude  # 启动后直接描述需求，或：
 /orchestrator-resume ~/my-project
 # 或
 "resume"
+
+# LangGraph 版
+python3 ~/.claude/orchestrator/graph.py resume ~/my-project
 ```
 
+---
+
+### 10. v2 升级内容
+
+| Phase | 内容 | 说明 |
+|-------|------|------|
+| Phase 0 | Skills 框架 | 4 agent × (_config.yaml + 2 skills)，按角色注入专业知识 |
+| Phase 1 | ReAct 模板 | 9 个模板升级为 5-Phase ReAct 格式（分析→规划→执行→验证→总结） |
+| Phase 1.5 | 渐进式披露 | `inject_at` 字段控制 skill 在哪个 phase 注入 |
+| Phase 2 | Python 编排器 | SkillLoader + BaseAgent + 13 状态 state machine |
+| Phase 3 | 验收系统 | AcceptanceChecker（PM/FE/BE/QA/Designer 各有验收规则） |
+| Phase 4 | LangGraph | StateGraph 11 节点 + SQLite checkpointer + Mermaid 可视化 |
+| Phase 5 | LangSmith | @traceable 装饰器 + span API，零开销优雅降级 |

@@ -1,0 +1,72 @@
+{
+  "name": "plan_approved",
+  "description": "实现 Auto-Chain: FE+BE 并行编码 → QA 测试 → 完成",
+  "trigger": "用户输入 plan approved/计划通过 (状态=TESTS_WRITTEN)",
+  "entry_state": "TESTS_WRITTEN",
+  "steps": [
+    {
+      "id": 1,
+      "name": "update_state_implementation",
+      "node_type": "AUTO",
+      "action": "state_change",
+      "agent": "orchestrator",
+      "from_state": "TESTS_WRITTEN",
+      "to_state": "IMPLEMENTATION"
+    },
+    {
+      "id": 2,
+      "name": "fe_implementation",
+      "node_type": "AUTO",
+      "action": "/figma-to-code build",
+      "agent": "fe",
+      "cli": "gemini",
+      "prompt_template": "fe-implementation.txt",
+      "preconditions": ["doc/prd.md exists", "doc/fe-plan.md exists", "doc/test-plan.md exists"],
+      "parallel_with": "be_implementation"
+    },
+    {
+      "id": 3,
+      "name": "be_implementation",
+      "node_type": "AUTO",
+      "action": "/figma-to-code build",
+      "agent": "be",
+      "cli": "codex",
+      "prompt_template": "be-implementation.txt",
+      "preconditions": ["doc/prd.md exists", "doc/be-plan.md exists", "doc/test-plan.md exists", "git repo initialized"],
+      "parallel_with": "fe_implementation"
+    },
+    {
+      "id": 4,
+      "name": "sync_barrier",
+      "node_type": "AUTO",
+      "action": "sync_barrier",
+      "agent": "orchestrator",
+      "wait_for": ["fe_implementation", "be_implementation"],
+      "on_success": { "to_state": "QA_TESTING" }
+    },
+    {
+      "id": 5,
+      "name": "qa_run_tests",
+      "node_type": "AUTO",
+      "action": "/run-tests",
+      "agent": "qa",
+      "cli": "codex",
+      "prompt_template": "qa-run-tests.txt",
+      "preconditions": ["doc/test-plan.md exists", "FE+BE code committed"],
+      "on_success": { "to_state": "QA_PASSED" },
+      "on_failure": { "to_state": "QA_FAILED" }
+    },
+    {
+      "id": 6,
+      "name": "evaluate_result",
+      "node_type": "AUTO",
+      "action": "decision",
+      "agent": "orchestrator",
+      "branches": {
+        "qa_passed": { "to_state": "DONE", "finish_chain": true },
+        "qa_failed": { "trigger_chain": "qa-fix", "condition": "reflection_count < 3" },
+        "qa_failed_limit": { "stop_chain": true, "reason": "反思修复已达上限(3次)，需要人工介入" }
+      }
+    }
+  ]
+}

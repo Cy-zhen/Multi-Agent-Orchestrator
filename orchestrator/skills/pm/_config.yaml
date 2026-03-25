@@ -1,0 +1,33 @@
+agent: PM
+max_inject_tokens: 2000
+
+# 渐进式披露：skills 按 ReAct Phase 注入，不是全部塞进 prompt 开头
+# inject_at: 指定在哪个 Phase 注入（upfront = 开头 / phase_name = 对应阶段）
+# 这样 Agent 在 Phase 1 看到的上下文精简，到 Phase 4 才看到验证规则
+
+skills:
+  - name: product-review-framework
+    file: product-review-framework.md
+    inject_mode: rules         # summary | rules | full | none
+    inject_at: design          # ← Phase 3 (Design) 时才注入
+    trigger: always
+    description: "产品审视框架：CEO/CTO/Eng 三视角审查 PRD"
+
+  - name: prd-quality-checklist
+    file: prd-quality-checklist.md
+    inject_mode: summary
+    inject_at: validate        # ← Phase 4 (Validate) 时才注入
+    trigger: always
+    description: "PRD 质量检查清单：完整性、可测试性、边界条件"
+
+  # === 如何添加新 skill ===
+  # 1. 把 .md 文件放进此目录
+  # 2. 在下方加一条记录
+  # 3. inject_at 可选值: upfront / understand / research / design / validate / output
+  #
+  # - name: market-sizing-analysis
+  #   file: market-sizing-analysis.md
+  #   inject_mode: none          # none = 不注入，只在 prompt 里告知文件路径
+  #   inject_at: research        # Phase 2 时可用
+  #   trigger: on_demand
+  #   description: "TAM/SAM/SOM 市场规模分析"

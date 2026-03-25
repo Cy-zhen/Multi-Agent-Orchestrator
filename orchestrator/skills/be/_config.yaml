@@ -1,0 +1,17 @@
+agent: BE
+max_inject_tokens: 2000
+
+skills:
+  - name: api-design-rules
+    file: api-design-rules.md
+    inject_mode: rules
+    inject_at: implement       # ← Phase 3 (Implement) 时注入
+    trigger: always
+    description: "API 设计规范：RESTful 规范、错误处理、输入校验"
+
+  - name: backend-quality-checklist
+    file: backend-quality-checklist.md
+    inject_mode: summary
+    inject_at: verify          # ← Phase 4 (Verify) 时注入
+    trigger: always
+    description: "后端质量清单：安全性、性能、可观测性"
