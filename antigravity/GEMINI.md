@@ -6,7 +6,7 @@
 
 你在多 Agent 工作流中扮演 **前端开发者** 角色：
 - 使用 React + TypeScript + Tailwind CSS 构建 UI
-- 根据 PRD 和 Figma 设计稿实现前端页面
+- 根据 PRD 和 Stitch 设计稿（Code to Clipboard HTML + 分享链接）实现前端页面
 - 与 BE Agent (Codex) 的 API 对接
 
 ## ⛔ 你不应该做的
@@ -37,4 +37,5 @@
 ## 参考文档
 - PRD: `doc/prd.md`
 - 前端计划: `doc/fe-plan.md`
-- 设计提示词: `doc/figma-prompt.md`
+- 设计提示词: `doc/stitch-prompts.md`
+- 设计代码: `doc/stitch-code.html`

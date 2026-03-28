@@ -101,17 +101,26 @@ next_state() {
   local approved="${2:-true}"  # CLI 输出中的 approved 字段
   case "$state" in
     IDEA)           echo "PRD_DRAFT";;
-    PRD_DRAFT)      echo "PRD_REVIEW";;
+    PRD_DRAFT)      echo "CEO_REVIEW";;
+    CEO_REVIEW)
+      [[ "$approved" == "true" ]] && echo "PRD_REVIEW" || echo "PRD_DRAFT";;
     PRD_REVIEW)
       [[ "$approved" == "true" ]] && echo "BE_APPROVED" || echo "PRD_DRAFT";;
     BE_APPROVED)
+      [[ "$approved" == "true" ]] && echo "DESIGN_PLAN_REVIEW" || echo "PRD_DRAFT";;
+    DESIGN_PLAN_REVIEW)
       [[ "$approved" == "true" ]] && echo "PRD_APPROVED" || echo "PRD_DRAFT";;
     PRD_APPROVED)   echo "FIGMA_PROMPT";;
     FIGMA_PROMPT)   echo "DESIGN_READY";;
     DESIGN_READY)   echo "TESTS_WRITTEN";;
     TESTS_WRITTEN)  echo "IMPLEMENTATION";;
-    IMPLEMENTATION) echo "QA_TESTING";;
-    QA_TESTING)     echo "QA_PASSED";;
+    IMPLEMENTATION) echo "CODE_REVIEW";;
+    CODE_REVIEW)
+      [[ "$approved" == "true" ]] && echo "SECURITY_AUDIT" || echo "IMPLEMENTATION";;
+    SECURITY_AUDIT)
+      [[ "$approved" == "true" ]] && echo "QA_TESTING" || echo "IMPLEMENTATION";;
+    QA_TESTING)     echo "VISUAL_REVIEW";;
+    VISUAL_REVIEW)  echo "QA_PASSED";;
     QA_PASSED)      echo "DONE";;
     QA_FAILED)      echo "IMPLEMENTATION";;
     *)              echo "UNKNOWN";;
@@ -123,20 +132,25 @@ next_state() {
 lookup_state() {
   local state="$1"
   case "$state" in
-    IDEA)           echo "INTERACTIVE|PM|claude|/generate-prd|pm-generate-prd.txt";;
-    PRD_DRAFT)      echo "USER_GATE|-|-|-|-";;
-    PRD_REVIEW)     echo "AUTO|BE|codex|/review-prd|be-review-prd.txt";;
-    BE_APPROVED)    echo "AUTO|FE|gemini|/review-prd|fe-review-prd.txt";;
-    PRD_APPROVED)   echo "AUTO|Designer|claude|/generate-figma-prompt|designer-figma-prompt.txt";;
-    FIGMA_PROMPT)   echo "USER_GATE|-|-|-|-";;
-    DESIGN_READY)   echo "AUTO|QA|codex|/prepare-tests|qa-prepare-tests.txt";;
-    TESTS_WRITTEN)  echo "PLAN_GATE|-|-|-|-";;
-    IMPLEMENTATION) echo "AUTO|FE+BE|gemini+codex|/figma-to-code|fe-implementation.txt";;
-    QA_TESTING)     echo "AUTO|QA|codex|/run-tests|qa-run-tests.txt";;
-    QA_PASSED)      echo "AUTO|-|-|-|-";;
-    QA_FAILED)      echo "AUTO|General|claude|/add-reflection|general-add-reflection.txt";;
-    DONE)           echo "TERMINAL|-|-|-|-";;
-    *)              echo "UNKNOWN|-|-|-|-";;
+    IDEA)              echo "INTERACTIVE|PM|claude|/generate-prd|pm-generate-prd.txt";;
+    PRD_DRAFT)         echo "USER_GATE|-|-|-|-";;
+    CEO_REVIEW)        echo "AUTO|Gstack|claude|/plan-ceo-review|ceo-review-prd.txt";;
+    PRD_REVIEW)        echo "AUTO|BE|codex|/review-prd|be-review-prd.txt";;
+    BE_APPROVED)       echo "AUTO|FE|gemini|/review-prd|fe-review-prd.txt";;
+    DESIGN_PLAN_REVIEW) echo "AUTO|Gstack|claude|/plan-design-review|design-review-plan.txt";;
+    PRD_APPROVED)      echo "AUTO|Designer|claude|/generate-figma-prompt|designer-figma-prompt.txt";;
+    FIGMA_PROMPT)      echo "USER_GATE|-|-|-|-";;
+    DESIGN_READY)      echo "AUTO|QA|codex|/prepare-tests|qa-prepare-tests.txt";;
+    TESTS_WRITTEN)     echo "PLAN_GATE|-|-|-|-";;
+    IMPLEMENTATION)    echo "AUTO|FE+BE|gemini+codex|/figma-to-code|fe-implementation.txt";;
+    CODE_REVIEW)       echo "AUTO|Gstack|claude|/review|staff-review-code.txt";;
+    SECURITY_AUDIT)    echo "AUTO|Gstack|claude|/cso|cso-audit.txt";;
+    QA_TESTING)        echo "AUTO|QA|codex|/run-tests|qa-run-tests.txt";;
+    VISUAL_REVIEW)     echo "AUTO|Gstack|claude|/design-review|design-review-visual.txt";;
+    QA_PASSED)         echo "AUTO|Gstack|claude|/ship|ship-release.txt";;
+    QA_FAILED)         echo "AUTO|Gstack|claude|/investigate|investigate-failure.txt";;
+    DONE)              echo "TERMINAL|-|-|-|-";;
+    *)                 echo "UNKNOWN|-|-|-|-";;
   esac
 }
 
@@ -164,7 +178,7 @@ cmd_status() {
   echo -e "║ CLI:        ${cli}"
   echo -e "║ 技能:       ${skill}"
   echo -e "║ 模板:       ${template}"
-  echo -e "║ 反思次数:   ${reflection_count}/3"
+  echo -e "║ 调查次数:   ${reflection_count}/3"
   echo -e "║ 项目目录:   $(pwd)"
   echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
   echo ""
@@ -411,6 +425,10 @@ cmd_dispatch() {
   prompt="${prompt//\{\{FIGMA_URL\}\}/$(get_field figma_url)}"
   prompt="${prompt//\{\{TEST_PLAN\}\}/$(cat doc/test-plan.md 2>/dev/null || echo '[Test plan not found]')}"
   prompt="${prompt//\{\{FE_PLAN\}\}/$(cat doc/fe-plan.md 2>/dev/null || echo '[FE plan not found]')}"
+  prompt="${prompt//\{\{FAILURE_CONTEXT\}\}/$(cat doc/qa-report.md 2>/dev/null || echo '[No failure context]')}"
+  prompt="${prompt//\{\{SITE_URL\}\}/$(get_field site_url)}"
+  prompt="${prompt//\{\{TIME_RANGE\}\}/$(get_field time_range)}"
+  prompt="${prompt//\{\{SKILLS_INJECTION\}\}/使用 .claude/skills/gstack/ 中的相关 skill 作为参考。}"
 
   echo -e "${BLUE}派发 Agent: ${agent} | Skill: ${skill} | CLI: ${cli}${NC}"
   echo -e "${CYAN}模板: ${template}${NC}"
@@ -688,23 +706,16 @@ cmd_auto_run() {
     case "$node_type" in
       AUTO)
         # === 特殊处理 ===
-        if [[ "$state" == "QA_PASSED" ]]; then
-          set_state "DONE" "auto_complete" "所有步骤完成"
-          echo -e "${GREEN}🎉 工作流完成！${NC}"
-          cmd_status
-          return 0
-        fi
-
         if [[ "$state" == "QA_FAILED" ]]; then
           local ref_count
           ref_count=$(jq -r '.reflection_count // 0' "$STATE_FILE")
           if [[ $ref_count -ge 3 ]]; then
-            echo -e "${RED}反思次数已达 3 次上限，停止自动执行${NC}"
+            echo -e "${RED}调查次数已达 3 次上限，停止自动执行${NC}"
             echo -e "${YELLOW}请手动介入修复问题${NC}"
             cmd_status
             return 1
           fi
-          # 增加反思计数
+          # 增加调查计数
           local tmp; tmp=$(mktemp)
           jq '.reflection_count += 1' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
         fi
@@ -841,7 +852,7 @@ cmd_auto_run() {
           if [[ -x "$LOGGER" ]]; then
             bash "$LOGGER" agent_done "FE+BE 完成(含回退): FE(ok=$fe_ok) BE(ok=$be_ok)" "orchestrator" 2>/dev/null || true
           fi
-          set_state "QA_TESTING" "implementation_done" "FE(ok=$fe_ok) BE(ok=$be_ok)"
+          set_state "CODE_REVIEW" "implementation_done" "FE(ok=$fe_ok) BE(ok=$be_ok)"
           continue
         fi
 
@@ -862,6 +873,10 @@ cmd_auto_run() {
           prompt="${prompt//\{\{FIGMA_URL\}\}/$(get_field figma_url)}"
           prompt="${prompt//\{\{TEST_PLAN\}\}/$(cat "${PROJECT_DIR}/doc/tests/test-plan.md" 2>/dev/null || cat "${PROJECT_DIR}/doc/test-plan.md" 2>/dev/null || echo '[No test plan]')}"
           prompt="${prompt//\{\{FE_PLAN\}\}/$(cat "${PROJECT_DIR}/doc/fe-plan.md" 2>/dev/null || echo '[No FE plan]')}"
+          prompt="${prompt//\{\{FAILURE_CONTEXT\}\}/$(cat "${PROJECT_DIR}/doc/qa-report.md" 2>/dev/null || echo '[No failure context]')}"
+          prompt="${prompt//\{\{SITE_URL\}\}/$(get_field site_url)}"
+          prompt="${prompt//\{\{TIME_RANGE\}\}/$(get_field time_range)}"
+          prompt="${prompt//\{\{SKILLS_INJECTION\}\}/使用 .claude/skills/gstack/ 中的相关 skill 作为参考。}"
         else
           prompt="执行 ${skill} 任务，项目目录: ${PROJECT_DIR}"
         fi

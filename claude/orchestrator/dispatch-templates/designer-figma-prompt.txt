@@ -2,7 +2,7 @@
 
 ## 任务
 
-根据 PRD 生成 Figma 设计提示词，覆盖所有页面和组件。
+根据 PRD 生成 Google Stitch 设计提示词，覆盖所有页面和组件。
 
 ## PRD 内容
 
@@ -22,9 +22,10 @@
 
 每批提示词包含:
 1. **Style Prefix**: 设计风格/主色调/字体/圆角
-2. **Web Responsive Design Rules**: 响应式断点规范
-3. **App Context**: 应用名/角色/强调色
-4. **Pages**: 每个页面 Mobile (375x812) + Desktop (1440x900)
+2. **Stitch Design Tokens**: Tailwind CSS config 格式的 color/font/spacing tokens
+3. **Web Responsive Design Rules**: 响应式断点规范
+4. **App Context**: 应用名/角色/强调色/具体美学方向
+5. **Pages**: 每个页面 Mobile (375x812) + Desktop (1440x900)
 
 ### 批次拆分规则
 
@@ -38,17 +39,24 @@
 - 默认态 / 加载态 / 空态 / 错误态
 - mobile 和 desktop 需要独立描述，不是简单放大
 
+### Stitch 交付物提醒
+
+在提示词末尾提醒用户：完成 Stitch 设计后，需导出以下交付物给 FE Agent：
+- **Code to Clipboard**: 完整 HTML 页面（含 Tailwind CSS config → colors/fontFamily/borderRadius）
+- **.zip 导出**: 切图资源（icon/图片）
+- **Stitch 分享链接**: 用于记录到 state.json
+
 ## 输出
 
-保存到 `doc/figma-prompts.md`（如有多批次，额外保存 `doc/figma-batch-{NN}.md`）
+保存到 `doc/stitch-prompts.md`（如有多批次，额外保存 `doc/stitch-batch-{NN}.md`）
 
 ```json
 {
   "success": true,
   "agent": "Designer",
-  "action": "/generate-figma-prompt",
-  "summary": "已生成 N 个页面的 Figma 设计提示词，分 M 个批次",
-  "output_files": ["doc/figma-prompts.md"],
+  "action": "/generate-stitch-prompt",
+  "summary": "已生成 N 个页面的 Stitch 设计提示词，分 M 个批次",
+  "output_files": ["doc/stitch-prompts.md"],
   "issues": []
 }
 ```

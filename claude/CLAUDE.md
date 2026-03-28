@@ -9,8 +9,8 @@
 
 ### 用户只需要 4 次介入：
 1. **描述概念** → PM(Claude) 自动生成 PRD → 停在 PRD_DRAFT
-2. **`approved`** → BE(Codex)审查 → FE(Gemini)审查 → Designer(Claude)生成Figma提示词 → 停在 FIGMA_PROMPT
-3. **`figma ready {url}`** → QA(Codex)生成测试 → 出实现计划 → 停等 plan approved
+2. **`approved`** → BE(Codex)审查 → FE(Gemini)审查 → Designer(Claude)生成Stitch提示词 → 停在 FIGMA_PROMPT
+3. **`design ready {url}`** → QA(Codex)生成测试 → 出实现计划 → 停等 plan approved
 4. **`plan approved`** → FE(Gemini)+BE(Codex)并行编码 → QA(Codex)测试 → 完成
 
 ### 状态机
@@ -79,7 +79,7 @@ IDEA → PRD_DRAFT → PRD_REVIEW → BE_APPROVED → PRD_APPROVED
 - 任意概念描述文本（状态=IDEA）→ /generate-prd
 - `"我已有代码，路径 {path}"` （状态=IDEA）→ /import-existing
 - `approved` / `通过` / `批准`（状态=PRD_DRAFT）→ /approve-prd → Auto-Chain
-- `figma ready {url}`（状态=FIGMA_PROMPT）→ /design-ready → Auto-Chain
+- `design ready {url}` / `stitch ready {url}` / `figma ready {url}`（状态=FIGMA_PROMPT）→ /design-ready → Auto-Chain
 - `plan approved` / `计划通过`（状态=TESTS_WRITTEN）→ 实现 → Auto-Chain
 - `"修改: {内容}"`（任意状态）→ /update-prd → 返回 PRD_DRAFT
 - `retry`（失败状态）→ 重启失败节点

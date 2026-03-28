@@ -32,6 +32,10 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
 │   ├── qa.md                     ← QA（Codex 执行）
 │   ├── general.md                ← General（Claude 执行）
 │   └── pm-references/            ← PM 参考文档
+├── skills/                       ← Claude Code 全局技能
+│   ├── frontend-design/          ← 🆕 Impeccable 设计技能 (SKILL.md + 7 reference)
+│   ├── audit/ polish/ ...         ← 🆕 20 个 Impeccable 命令 skill
+│   └── gstack/                   ← 质量关卡技能
 ├── orchestrator/                 ← 编排器核心（v2 Python）
 │   ├── SKILL.md                  ← 完整编排技能定义
 │   ├── state-machine.md          ← 状态机说明
@@ -65,7 +69,9 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
 │       ├── qa-prepare-tests.txt
 │       ├── qa-run-tests.txt
 │       ├── be-implementation.txt
-│       ├── fe-implementation.txt
+│       ├── fe-implementation.txt     ← 🆕 引用 impeccable 设计指南
+│       ├── design-review-plan.txt    ← 🆕 引用 impeccable 7 维度
+│       ├── design-review-visual.txt  ← 🆕 引用 impeccable 视觉基准
 │       └── general-add-reflection.txt
 └── workflows/                    ← 工作流触发器
     ├── start.md
@@ -74,6 +80,16 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
     ├── resume.md
     ├── set-state.md
     └── status.md
+
+~/.gemini/                        ← 🆕 Gemini CLI 全局配置
+└── skills/                       ← Impeccable 设计技能（FE Agent 使用）
+    ├── frontend-design/          ← SKILL.md + 7 reference
+    └── audit/ polish/ ...         ← 20 个命令 skill
+
+~/.codex/                         ← 🆕 Codex CLI 全局配置
+└── skills/                       ← Impeccable 设计技能（BE Agent 参考）
+    ├── frontend-design/
+    └── audit/ polish/ ...
 
 项目仓库镜像/                      ← Git 跟踪用
 ├── orchestrator/                 ← ~/.claude/orchestrator/ 的同步副本
@@ -146,6 +162,7 @@ Implementation → QA_Test →|pass| END
 - **Python 3.10+** — LangGraph 版需要
 - **jq** — JSON 处理
 - **Git** — Codex 需要 git repo
+- **Impeccable 🆕** — 已安装到 `~/.claude/skills/`、`~/.gemini/skills/`、`~/.codex/skills/`
 
 #### Python 依赖（v2）
 ```bash
@@ -265,3 +282,29 @@ python3 ~/.claude/orchestrator/graph.py resume ~/my-project
 | Phase 3 | 验收系统 | AcceptanceChecker（PM/FE/BE/QA/Designer 各有验收规则） |
 | Phase 4 | LangGraph | StateGraph 11 节点 + SQLite checkpointer + Mermaid 可视化 |
 | Phase 5 | LangSmith | @traceable 装饰器 + span API，零开销优雅降级 |
+| Phase 6 | Impeccable | 集成 pbakaus/impeccable 前端设计技能，3 个 dispatch template 引用设计基准 |
+
+---
+
+### 11. Impeccable 设计技能 🆕
+
+> 来源：[pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache 2.0)
+
+所有 Agent 共享的前端设计技能，避免 AI Slop（千篇一律的 AI 生成 UI）。
+
+**包含：**
+- 1 个核心 skill (`frontend-design`) + 7 个设计参考文档（排版/配色/空间/动效/交互/响应式/UX文案）
+- 20 个命令 skill：`/audit` `/polish` `/normalize` `/critique` `/distill` 等
+
+**安装位置：**
+
+| CLI | 路径 |
+|-----|------|
+| Claude Code | `~/.claude/skills/frontend-design/` |
+| Gemini CLI | `~/.gemini/skills/frontend-design/` |
+| Codex CLI | `~/.codex/skills/frontend-design/` |
+
+**Dispatch Template 集成：**
+- `design-review-plan.txt` — 7 维度设计审查对齐 impeccable
+- `design-review-visual.txt` — 80 项视觉审查引用 impeccable 基准
+- `fe-implementation.txt` — FE 编码时参考 impeccable 设计指南

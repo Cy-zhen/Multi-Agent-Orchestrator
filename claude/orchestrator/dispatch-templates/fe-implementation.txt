@@ -14,7 +14,21 @@
 
 ## 设计稿
 
-Figma URL: {{FIGMA_URL}}
+Design URL (Stitch): {{FIGMA_URL}}
+
+## Stitch Design Code（如有）
+
+以下是 Stitch Code to Clipboard 导出的 HTML 代码，包含 Tailwind config tokens 和组件结构：
+
+{{DESIGN_CODE}}
+
+### Stitch 代码消费指南
+
+1. 提取 `tailwind.config.theme.extend` 中的 colors/fontFamily/borderRadius → 合并到项目 `tailwind.config.ts`
+2. HTML 结构 → 翻译为 React/Next.js 组件（class → className，事件绑定等）
+3. 内联 `<style>` → 迁移到 `globals.css` 或组件级 CSS Module
+4. 图片 src → 替换为 `public/` 下的实际资源路径
+5. Google Fonts 链接 → 迁移到 `next/font` 或 `layout.tsx` 的 `<link>`
 
 ## 实现计划
 

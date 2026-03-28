@@ -149,7 +149,7 @@ description: 前端工程师 — Next.js 16 / React 19 / TypeScript / Tailwind C
 
 ### /figma-to-code（前端实现）
 
-**描述**: 根据设计稿、PRD 和实现计划编码实现前端
+**描述**: 根据 Stitch 设计稿（Code to Clipboard HTML + 分享链接）、PRD 和实现计划编码实现前端
 
 **节点类型**: `AUTO`
 
@@ -171,13 +171,19 @@ description: 前端工程师 — Next.js 16 / React 19 / TypeScript / Tailwind C
 #### 执行步骤 (build)
 
 1. 读取实现计划
-2. 初始化 Next.js 16 项目（App Router + TS + TW4）
-3. 配置 RainbowKit/Wagmi 钱包连接
-4. 用 Radix UI + Tailwind CSS 4 实现组件
-5. Zustand 全局状态 + TanStack Query 服务端数据
-6. Axios 对接 BE API
-7. 运行 `yarn build` 验证编译
-8. 输出实现报告
+2. **消费 Stitch 设计代码**（`doc/stitch-code.html`）:
+   - 提取 `tailwind.config.theme.extend` → 合并到 `tailwind.config.ts`
+   - HTML 结构 → 翻译为 React/Next.js 组件（class → className）
+   - 内联 `<style>` → 迁移到 `globals.css` 或 CSS Module
+   - 图片 src → 替换为 `public/` 下实际资源路径
+   - Google Fonts → `next/font` 或 layout `<link>`
+3. 初始化 Next.js 16 项目（App Router + TS + TW4）
+4. 配置 RainbowKit/Wagmi 钱包连接
+5. 用 Radix UI + Tailwind CSS 4 实现组件
+6. Zustand 全局状态 + TanStack Query 服务端数据
+7. Axios 对接 BE API
+8. 运行 `yarn build` 验证编译
+9. 输出实现报告
 
 #### 执行后置条件
 
@@ -235,7 +241,8 @@ gemini -p "$(cat ~/.claude/orchestrator/dispatch-templates/fe-implementation.txt
   | sed "s|{{PROJECT_DIR}}|$(pwd)|g" \
   | sed "s|{{PRD_CONTENT}}|$(cat doc/prd.md)|g" \
   | sed "s|{{FE_PLAN}}|$(cat doc/fe-plan.md)|g" \
-  | sed "s|{{FIGMA_URL}}|$(jq -r .figma_url doc/state.json)|g")" \
+  | sed "s|{{FIGMA_URL}}|$(jq -r .figma_url doc/state.json)|g" \
+  | sed "s|{{DESIGN_CODE}}|$(cat doc/stitch-code.html 2>/dev/null || echo '无 Stitch 代码导出')|g")" \
   --yolo --include-directories "$(pwd)" -o json
 ```
 

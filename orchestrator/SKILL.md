@@ -39,10 +39,43 @@
 | **FE** (前端工程师) | `~/.claude/agents/fe.md` | Gemini | DESIGN_READY / PRD_REVIEW(阶段2) | `/review-prd`(FE视角), `/figma-to-code`(前端) |
 | **QA** (测试工程师) | `~/.claude/agents/qa.md` | Codex | TESTS_WRITTEN / QA_TESTING | `/prepare-tests`, `/run-tests` |
 | **General** (全能) | `~/.claude/agents/general.md` | Claude | 跨角色 / 探索性 | 所有技能 |
+| **Gstack** (质量关卡) | `.claude/skills/gstack/` | Claude | 多个阶段交叉介入 | `/plan-ceo-review`, `/plan-design-review`, `/review`, `/cso`, `/investigate`, `/design-review`, `/ship`, `/retro`, `/document-release` |
+
+### 共享设计技能：Impeccable
+
+> 来源：[pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache 2.0)
+> 基于 Anthropic 的 frontend-design skill 扩展，提供更深入的前端设计指导。
+
+**已安装位置（全局共享）：**
+
+| CLI | 路径 | 说明 |
+|-----|------|------|
+| Claude Code | `~/.claude/skills/frontend-design/` | Designer/Gstack 使用 |
+| Gemini CLI | `~/.gemini/skills/frontend-design/` | FE Agent 使用 |
+| Codex CLI | `~/.codex/skills/frontend-design/` | BE Agent 参考 |
+
+**包含内容：**
+- `SKILL.md` — 核心设计原则 + AI Slop 检测清单
+- `reference/typography.md` — 排版规范
+- `reference/color-and-contrast.md` — 配色与对比度
+- `reference/spatial-design.md` — 空间设计
+- `reference/motion-design.md` — 动效设计
+- `reference/interaction-design.md` — 交互设计
+- `reference/responsive-design.md` — 响应式设计
+- `reference/ux-writing.md` — UX 文案
+- 20 个命令 skill：`/audit`, `/critique`, `/normalize`, `/polish`, `/distill`, `/clarify`, `/optimize`, `/harden`, `/animate`, `/colorize`, `/bolder`, `/quieter`, `/delight`, `/extract`, `/adapt`, `/onboard`, `/typeset`, `/arrange`, `/overdrive`, `/teach-impeccable`
+
+**Dispatch Template 集成：**
+
+| 模板 | 阶段 | 集成方式 |
+|------|------|----------|
+| `design-review-plan.txt` | DESIGN_PLAN_REVIEW | 7 维度审查对齐 impeccable（Pass 4 AI Slop 必查） |
+| `design-review-visual.txt` | VISUAL_REVIEW | 80 项视觉审查引用 impeccable 基准 |
+| `fe-implementation.txt` | IMPLEMENTATION | FE 编码时参考 impeccable 设计指南 |
 
 ---
 
-## 状态机（13 个状态）
+## 状态机（18 个状态，含 5 个 Gstack 质量关卡 🆕）
 
 ```
 IDEA ──────────────────────────────────────────────────────────────
@@ -52,22 +85,32 @@ IDEA ─────────────────────────
                                                      │
                                           (用户: /approve-prd)
                                                      │
-                                              PRD_REVIEW
+                                         🆕 CEO_REVIEW
+                                     (Gstack: /plan-ceo-review)
                                                   │
-                             ┌────────────────────┴────────────────────┐
-                      (BE: /review-prd 阶段1)                    (如BE拒绝)
-                             │                                    PRD_DRAFT ⏸
+                                    ┌─────────────┴─────────────┐
+                                  通过                         不通过
+                                    │                     PRD_DRAFT ⏸
+                              PRD_REVIEW
+                                  │
+                             ┌────┴────────────────────┐
+                      (BE: /review-prd 阶段1)     (如BE拒绝)
+                             │                    PRD_DRAFT ⏸
                     (FE: /review-prd 阶段2)
                              │
                ┌─────────────┴──────────────┐
             通过                           打回
+       🆕 DESIGN_PLAN_REVIEW            PRD_DRAFT ⏸
+       (Gstack: /plan-design-review)
+               ┌─────────────┴──────────────┐
+            通过                           问题
        PRD_APPROVED                     PRD_DRAFT ⏸
             │
-  (Designer: /generate-figma-prompt)
+  (Designer: /generate-stitch-prompt)
             │
        FIGMA_PROMPT
             │
-    ⏸ 用户完成 Figma 设计 → "figma ready {url}"
+    ⏸ 用户完成 Stitch 设计 → "design ready {url}"
             │
        DESIGN_READY
             │
@@ -83,15 +126,25 @@ IDEA ─────────────────────────
             │（两者均完成）
       IMPLEMENTATION
             │
-  (QA: /prepare-ui-tests + 执行)
+    🆕 CODE_REVIEW (Gstack: /review)
+            │
+    🆕 SECURITY_AUDIT (Gstack: /cso)
+            │
+  (QA: /run-tests)
             │
        QA_TESTING
        │          │
      通过        失败
        │          │
-   QA_PASSED   QA_FAILED
-       │          │
-     DONE    (/add-reflection, 最多3次)──► IMPLEMENTATION
+ 🆕 VISUAL_REVIEW  🆕 QA_FAILED
+ (Gstack: /design-review) (Gstack: /investigate, 最多3次)
+       │                        │
+   QA_PASSED               IMPLEMENTATION ──┘
+ (Gstack: /ship)
+       │
+     DONE
+       │
+  (可选: /retro + /document-release)
 
 ANY_STATE ──(/update-prd)──► PRD_DRAFT ⏸
 ANY_STATE ──(/import-existing)──► [PM 判断切入状态]
@@ -179,9 +232,19 @@ bash ~/.claude/logger.sh checkpoint "等待用户审阅 PRD" "orchestrator"
 | BE | Codex | `be-review-prd.txt` / `be-implementation.txt` | `codex exec --full-auto "$(cat template)"` |
 | QA | Codex | `qa-prepare-tests.txt` / `qa-run-tests.txt` | `codex exec --full-auto "$(cat template)"` |
 | General | Claude | `general-add-reflection.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:CEO | Claude | `ceo-review-prd.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Design | Claude | `design-review-plan.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Review | Claude | `staff-review-code.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:CSO | Claude | `cso-audit.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Visual | Claude | `design-review-visual.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Debug | Claude | `investigate-failure.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Ship | Claude | `ship-release.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Retro | Claude | `retro-report.txt` | `claude -p "$(cat template)" --output-format json` |
+| Gstack:Docs | Claude | `document-release.txt` | `claude -p "$(cat template)" --output-format json` |
 
 > 详细 CLI 构造规则和变量替换见 [dispatch-agent.md](file:///Users/cy-zhen/.claude/orchestrator/skills/dispatch-agent.md)
 > Prompt 模板位于: `~/.claude/orchestrator/dispatch-templates/`
+> Gstack Skills 源码位于: `.claude/skills/gstack/`
 
 ---
 
@@ -499,6 +562,9 @@ cat doc/logs/summary.md
 3. **日志必须**：每个节点开始/结束/失败都要写日志
 4. **并行支持**：FE+BE 同步启动，都完成才进下一状态
 5. **失败立即停链**：写 chain_break 日志，输出失败摘要，等待用户
-6. **反思最多3次**：QA_FAILED 超3次停止自动重试
+6. **调查最多3次**：QA_FAILED 经 /investigate 调查后重试，超3次停止
 7. **状态持久化**：每次状态转换后写 state.json + 日志
 8. **项目隔离**：所有运行时文件在项目级 `doc/` 目录，全局 `~/.claude/` 只存模板
+9. **Gstack 全部走 Claude**：所有 gstack skills 均通过 Claude CLI 执行，不走 Codex/Gemini
+10. **质量关卡不跳过**：CEO_REVIEW 和 CODE_REVIEW 为必经节点，不可 skip
+11. **设计质量**：所有涉及 UI/前端的设计审查和实现必须参考 impeccable frontend-design skill，避免 AI Slop

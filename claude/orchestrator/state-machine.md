@@ -19,8 +19,8 @@
 | `PRD_DRAFT` | `USER_GATE` | — | — | — | 用户 | 用户审阅 PRD，"approved" 继续 |
 | `PRD_REVIEW` | `AUTO` | BE | codex | `/review-prd` | BE Agent | BE 从后端视角审查 PRD |
 | `BE_APPROVED` | `AUTO` | FE | gemini | `/review-prd` | FE Agent | FE 从前端视角审查 PRD |
-| `PRD_APPROVED` | `AUTO` | Designer | claude | `/generate-figma-prompt` | Designer | 生成 Figma 设计提示词 |
-| `FIGMA_PROMPT` | `USER_GATE` | — | — | — | 用户 | 等待 Figma 设计完成 |
+| `PRD_APPROVED` | `AUTO` | Designer | claude | `/generate-stitch-prompt` | Designer | 生成 Stitch 设计提示词 |
+| `FIGMA_PROMPT` | `USER_GATE` | — | — | — | 用户 | 等待 Stitch 设计完成 |
 | `DESIGN_READY` | `AUTO` | QA | codex | `/prepare-tests` | QA Agent | 生成测试计划 |
 | `TESTS_WRITTEN` | `PLAN_GATE` | — | — | — | 用户 | 用户审阅计划 |
 | `IMPLEMENTATION` | `AUTO` | FE+BE | gemini+codex | `/figma-to-code` | FE+BE 并行 | 前后端并行编码 |
@@ -42,8 +42,8 @@ PRD_REVIEW    AUTO         BE 审查通过                       BE_APPROVED    
 PRD_REVIEW    AUTO         BE 审查不通过                     PRD_DRAFT       BE(Codex)     be-review-prd.txt
 BE_APPROVED   AUTO         FE 审查通过                       PRD_APPROVED    FE(Gemini)    fe-review-prd.txt
 BE_APPROVED   AUTO         FE 审查不通过                     PRD_DRAFT       FE(Gemini)    fe-review-prd.txt
-PRD_APPROVED  AUTO         生成 Figma 提示词                 FIGMA_PROMPT    Designer      designer-figma-prompt.txt
-FIGMA_PROMPT  USER_GATE    用户说 "figma ready {url}"       DESIGN_READY    用户信号       —
+PRD_APPROVED  AUTO         生成 Stitch 设计提示词               FIGMA_PROMPT    Designer      designer-figma-prompt.txt
+FIGMA_PROMPT  USER_GATE    用户说 "design ready {url}"         DESIGN_READY    用户信号       —
 DESIGN_READY  AUTO         QA 生成测试计划                   TESTS_WRITTEN   QA(Codex)     qa-prepare-tests.txt
 TESTS_WRITTEN PLAN_GATE    用户说 "plan approved"            IMPLEMENTATION  用户信号       —
 IMPLEMENTATION AUTO        FE+BE 编码完成                    QA_TESTING      FE+BE         fe/be-implementation.txt
@@ -73,9 +73,9 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
 用户: "approved" (状态=PRD_DRAFT)
   → 1. BE: /review-prd (AUTO)
     ├→ 通过 → 2. FE: /review-prd (AUTO)
-    │         ├→ 通过 → 3. Designer: /generate-figma-prompt (AUTO)
+    │         ├→ 通过 → 3. Designer: /generate-stitch-prompt (AUTO)
     │         │         → 状态 = FIGMA_PROMPT (USER_GATE)
-    │         │         → ⏸ 等待用户操作：Figma 设计完成
+    │         │         → ⏸ 等待用户操作：Stitch 设计完成
     │         └→ 不通过 → ❌ 链停止
     │                    → 状态 = PRD_DRAFT (USER_GATE)
     └→ 不通过 → ❌ 链停止
@@ -84,8 +84,8 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
 
 ### 路径 3: 设计完成 → 实现计划 (AUTO → PLAN_GATE)
 ```
-用户: "figma ready https://..." (状态=FIGMA_PROMPT)
-  → 记录 figma_url
+用户: "design ready https://..." (状态=FIGMA_PROMPT)
+  → 记录 design_url (存入 figma_url 字段)
   → 1. QA: /prepare-tests (AUTO)
   → 状态 = TESTS_WRITTEN (PLAN_GATE)
   → ⏸ 等待方案审批：审阅测试计划和实现计划
@@ -111,7 +111,7 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
 |---------|---------|---------|-----------|
 | 概念描述文本 | `IDEA` | `PRD_DRAFT` | 内联 PM |
 | `approved` / `通过` / `批准` | `PRD_DRAFT` | `PRD_REVIEW` | approve-prd chain |
-| `figma ready {url}` | `FIGMA_PROMPT` | `DESIGN_READY` | figma-ready chain |
+| `design ready {url}` / `stitch ready {url}` / `figma ready {url}` | `FIGMA_PROMPT` | `DESIGN_READY` | design-ready chain |
 | `plan approved` / `计划通过` | `TESTS_WRITTEN` | `IMPLEMENTATION` | plan-approved chain |
 | `修改: {内容}` | 任意 | `PRD_DRAFT` | PM /update-prd |
 | `retry` / `重试` | 失败状态 | 重启失败节点 | — |

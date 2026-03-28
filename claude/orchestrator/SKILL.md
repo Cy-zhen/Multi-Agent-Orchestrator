@@ -34,7 +34,7 @@
 |---|---|---|---|---|
 | **Orchestrator** | `~/.claude/orchestrator/SKILL.md` | Claude | 始终活跃 | 状态管理、派发、链路控制 |
 | **PM** (产品经理) | `~/.claude/agents/pm.md` | Claude | IDEA 状态 / 需要 PRD | `/generate-prd`, `/update-prd`, `/import-existing` |
-| **Designer** (设计师) | `~/.claude/agents/designer.md` | Claude | PRD_APPROVED 状态 | `/generate-figma-prompt`, `/design-ready` |
+| **Designer** (设计师) | `~/.claude/agents/designer.md` | Claude | PRD_APPROVED 状态 | `/generate-stitch-prompt`, `/design-ready` |
 | **BE** (后端工程师) | `~/.claude/agents/be.md` | Codex | DESIGN_READY / PRD_REVIEW(阶段1) | `/review-prd`(BE视角), `/figma-to-code`(后端) |
 | **FE** (前端工程师) | `~/.claude/agents/fe.md` | Gemini | DESIGN_READY / PRD_REVIEW(阶段2) | `/review-prd`(FE视角), `/figma-to-code`(前端) |
 | **QA** (测试工程师) | `~/.claude/agents/qa.md` | Codex | TESTS_WRITTEN / QA_TESTING | `/prepare-tests`, `/run-tests` |
@@ -160,7 +160,7 @@ bash ~/.claude/logger.sh checkpoint "等待用户审阅 PRD" "orchestrator"
 | 概念描述（自然语言）| IDEA | → PM `/generate-prd` → 停在 `PRD_DRAFT` |
 | `"我已有代码，路径 {path}"` | IDEA | → PM `/import-existing` → 停在 PM 判断的切入状态 |
 | `"通过"` / `"approved"` / `"ok"` | PRD_DRAFT | → Auto-Chain → 停在 `FIGMA_PROMPT` |
-| `"figma ready {url}"` | FIGMA_PROMPT | → Auto-Chain → 停在 `TESTS_WRITTEN` |
+| `"figma ready {url}"` / `"design ready {url}"` / `"stitch ready {url}"` | FIGMA_PROMPT | → Auto-Chain → 停在 `TESTS_WRITTEN` |
 | `"plan approved"` | TESTS_WRITTEN | → Auto-Chain → 完成 |
 | `"修改: {内容}"` | 任意状态 | → PM `/update-prd` → 返回 `PRD_DRAFT` |
 | `"retry"` | 失败状态 | → 重启失败节点 |
@@ -352,18 +352,18 @@ bash ~/.claude/logger.sh state_change "PRD_REVIEW → PRD_APPROVED" "orchestrato
 ### PRD_APPROVED → FIGMA_PROMPT
 
 ```bash
-bash ~/.claude/logger.sh agent_start "Designer 开始生成 Figma 提示词" "designer"
-# [Designer /generate-figma-prompt 执行]
-bash ~/.claude/logger.sh agent_done "Figma 提示词生成完成：doc/figma-prompt.md" "designer"
+bash ~/.claude/logger.sh agent_start "Designer 开始生成 Stitch 设计提示词" "designer"
+# [Designer /generate-stitch-prompt 执行]
+bash ~/.claude/logger.sh agent_done "Stitch 设计提示词生成完成：doc/stitch-prompts.md" "designer"
 bash ~/.claude/logger.sh state_change "PRD_APPROVED → FIGMA_PROMPT" "orchestrator"
-bash ~/.claude/logger.sh checkpoint "等待用户完成 Figma 设计" "orchestrator"
+bash ~/.claude/logger.sh checkpoint "等待用户完成 Stitch 设计" "orchestrator"
 ```
 
 ### FIGMA_PROMPT → TESTS_WRITTEN（用户提供 Figma URL 后）
 
 ```bash
-bash ~/.claude/logger.sh figma_ready "用户提供 Figma URL: $FIGMA_URL"
-# 写入 state.json figma_url
+bash ~/.claude/logger.sh figma_ready "用户提供 Stitch URL: $FIGMA_URL"
+# 写入 state.json figma_url（存放 Stitch 分享链接）
 bash ~/.claude/logger.sh state_change "FIGMA_PROMPT → DESIGN_READY" "orchestrator"
 
 bash ~/.claude/logger.sh agent_start "QA 开始生成测试计划" "qa"
@@ -443,7 +443,7 @@ cat > doc/state.json << 'EOF'
   "state": "IDEA",
   "project": "PROJECT_NAME",
   "prd_path": "doc/prd.md",
-  "figma_url": null,
+  "figma_url": null,              // Stitch 分享链接（字段名保持向后兼容）
   "tests_path": "doc/tests/",
   "reflection_count": 0,
   "entry_point": "IDEA",
