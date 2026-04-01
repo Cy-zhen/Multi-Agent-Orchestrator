@@ -158,7 +158,9 @@ next_state() {
     DESIGN_PLAN_REVIEW)
       [[ "$approved" == "true" ]] && echo "PRD_APPROVED" || echo "PRD_DRAFT";;
     PRD_APPROVED)   echo "FIGMA_PROMPT";;
-    FIGMA_PROMPT)   echo "DESIGN_READY";;
+    FIGMA_PROMPT)   echo "DESIGN_SPEC";;
+    DESIGN_SPEC)    echo "DESIGN_SPEC_REVIEW";;
+    DESIGN_SPEC_REVIEW) echo "DESIGN_READY";;
     DESIGN_READY)   echo "TESTS_WRITTEN";;
     TESTS_WRITTEN)  echo "IMPLEMENTATION";;
     IMPLEMENTATION) echo "CODE_REVIEW";;
@@ -168,7 +170,8 @@ next_state() {
       [[ "$approved" == "true" ]] && echo "QA_TESTING" || echo "IMPLEMENTATION";;
     QA_TESTING)     echo "VISUAL_REVIEW";;
     VISUAL_REVIEW)  echo "QA_PASSED";;
-    QA_PASSED)      echo "DONE";;
+    QA_PASSED)      echo "PRODUCT_DOC";;
+    PRODUCT_DOC)    echo "DONE";;
     QA_FAILED)      echo "IMPLEMENTATION";;
     *)              echo "UNKNOWN";;
   esac
@@ -187,6 +190,8 @@ lookup_state() {
     DESIGN_PLAN_REVIEW) echo "AUTO|Gstack|claude|/plan-design-review|design-review-plan.txt";;
     PRD_APPROVED)      echo "AUTO|Designer|claude|/generate-figma-prompt|designer-figma-prompt.txt";;
     FIGMA_PROMPT)      echo "USER_GATE|-|-|-|-";;
+    DESIGN_SPEC)       echo "AUTO|PM|claude|/extract-design-spec|pm-design-spec.txt";;
+    DESIGN_SPEC_REVIEW) echo "USER_GATE|-|-|-|-";;
     DESIGN_READY)      echo "AUTO|QA|codex|/prepare-tests|qa-prepare-tests.txt";;
     TESTS_WRITTEN)     echo "PLAN_GATE|-|-|-|-";;
     IMPLEMENTATION)    echo "AUTO|FE+BE|gemini+codex|/figma-to-code|fe-implementation.txt";;
@@ -195,6 +200,7 @@ lookup_state() {
     QA_TESTING)        echo "AUTO|QA|codex|/run-tests|qa-run-tests.txt";;
     VISUAL_REVIEW)     echo "AUTO|Gstack|claude|/design-review|design-review-visual.txt";;
     QA_PASSED)         echo "AUTO|Gstack|claude|/ship|ship-release.txt";;
+    PRODUCT_DOC)       echo "AUTO|PM|claude|/generate-product-doc|pm-product-doc.txt";;
     QA_FAILED)         echo "AUTO|Gstack|claude|/investigate|investigate-failure.txt";;
     DONE)              echo "TERMINAL|-|-|-|-";;
     *)                 echo "UNKNOWN|-|-|-|-";;
@@ -983,10 +989,11 @@ cmd_auto_run() {
         cmd_status
         echo -e "${YELLOW}⏸ 等待用户信号。运行: orchestrator.sh signal <信号> ${PROJECT_DIR}${NC}"
         case "$state" in
-          PRD_DRAFT)     echo -e "  信号: ${BOLD}approved${NC} — 批准 PRD";;
-          FIGMA_PROMPT)  echo -e "  信号: ${BOLD}figma ready <url>${NC} — Figma 设计完成";;
-          TESTS_WRITTEN) echo -e "  信号: ${BOLD}plan approved${NC} — 批准测试计划";;
-          IDEA)          echo -e "  信号: ${BOLD}<项目描述>${NC} — 提供概念描述";;
+          PRD_DRAFT)          echo -e "  信号: ${BOLD}approved${NC} — 批准 PRD";;
+          FIGMA_PROMPT)       echo -e "  信号: ${BOLD}figma ready <url>${NC} — Figma 设计完成";;
+          DESIGN_SPEC_REVIEW) echo -e "  信号: ${BOLD}approved${NC} — 批准设计规格 + 更新后的 PRD";;
+          TESTS_WRITTEN)      echo -e "  信号: ${BOLD}plan approved${NC} — 批准测试计划";;
+          IDEA)               echo -e "  信号: ${BOLD}<项目描述>${NC} — 提供概念描述";;
         esac
         return 0
         ;;
@@ -1069,11 +1076,24 @@ cmd_signal() {
         # 更新 figma_url
         local tmp; tmp=$(mktemp)
         jq --arg u "$url" '.figma_url = $u' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
-        set_state "DESIGN_READY" "figma_ready" "Figma URL: $url"
-        # 继续自动链
+        set_state "DESIGN_SPEC" "figma_ready" "Figma URL: $url"
+        # 继续自动链 → DESIGN_SPEC (AUTO) → DESIGN_SPEC_REVIEW (GATE)
         cmd_auto_run "$PROJECT_DIR"
       else
         echo -e "${YELLOW}FIGMA_PROMPT 阶段请说 'figma ready <url>'${NC}"
+      fi
+      ;;
+
+    DESIGN_SPEC_REVIEW)
+      if [[ "$signal_text" =~ ^(approved|通过|批准|ok)$ ]]; then
+        set_state "DESIGN_READY" "user_approved_design_spec" "用户批准设计规格 + 更新后的 PRD"
+        # 继续自动链
+        cmd_auto_run "$PROJECT_DIR"
+      else
+        echo -e "${YELLOW}DESIGN_SPEC_REVIEW 阶段请说 'approved' 批准设计规格。${NC}"
+        echo -e "${CYAN}请审阅以下文件:${NC}"
+        echo -e "  📄 ${PROJECT_DIR}/doc/design-spec.md — 设计规格书"
+        echo -e "  📄 ${PROJECT_DIR}/doc/prd.md — 更新后的 PRD"
       fi
       ;;
 

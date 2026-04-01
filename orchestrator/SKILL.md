@@ -75,7 +75,7 @@
 
 ---
 
-## 状态机（18 个状态，含 5 个 Gstack 质量关卡 🆕）
+## 状态机（21 个状态，含 5 个 Gstack 质量关卡 + 3 个文档生命周期节点）
 
 ```
 IDEA ──────────────────────────────────────────────────────────────
@@ -110,7 +110,15 @@ IDEA ─────────────────────────
             │
        FIGMA_PROMPT
             │
-    ⏸ 用户完成 Stitch 设计 → "design ready {url}"
+    ⏸ 用户完成 Stitch 设计 → "figma ready {url}"
+            │
+       📐 DESIGN_SPEC                          ← 新增！
+    (PM: /extract-design-spec)
+    产出: doc/design-spec.md + PRD 增量更新 v1.1
+            │
+       ⏸ DESIGN_SPEC_REVIEW                    ← 新增！
+    用户审阅设计规格 + 更新后的 PRD
+    → "approved"
             │
        DESIGN_READY
             │
@@ -141,6 +149,11 @@ IDEA ─────────────────────────
        │                        │
    QA_PASSED               IMPLEMENTATION ──┘
  (Gstack: /ship)
+       │
+   📖 PRODUCT_DOC                             ← 新增！
+ (PM: /generate-product-doc)
+ 产出: doc/product-doc.md（含5类流程图）
+       + README.md 更新 + PRD 冻结标记 v2.0
        │
      DONE
        │
@@ -206,15 +219,16 @@ bash ~/.claude/logger.sh checkpoint "等待用户审阅 PRD" "orchestrator"
 
 ---
 
-## 用户信号表（4个介入点 + 扩展命令）
+## 用户信号表（5个介入点 + 扩展命令）
 
 | 用户输入 | 当前状态 | 触发动作 |
 |---------|---------|---------|
 | 概念描述（自然语言）| IDEA | → PM `/generate-prd` → 停在 `PRD_DRAFT` |
 | `"我已有代码，路径 {path}"` | IDEA | → PM `/import-existing` → 停在 PM 判断的切入状态 |
 | `"通过"` / `"approved"` / `"ok"` | PRD_DRAFT | → Auto-Chain → 停在 `FIGMA_PROMPT` |
-| `"figma ready {url}"` | FIGMA_PROMPT | → Auto-Chain → 停在 `TESTS_WRITTEN` |
-| `"plan approved"` | TESTS_WRITTEN | → Auto-Chain → 完成 |
+| `"figma ready {url}"` | FIGMA_PROMPT | → DESIGN_SPEC (AUTO) → 停在 `DESIGN_SPEC_REVIEW` |
+| `"approved"` | DESIGN_SPEC_REVIEW | → Auto-Chain → 停在 `TESTS_WRITTEN` |
+| `"plan approved"` | TESTS_WRITTEN | → Auto-Chain → PRODUCT_DOC (AUTO) → `DONE` |
 | `"修改: {内容}"` | 任意状态 | → PM `/update-prd` → 返回 `PRD_DRAFT` |
 | `"retry"` | 失败状态 | → 重启失败节点 |
 | `"skip"` | 失败状态 | → 记日志 + 跳过，继续链 |
@@ -226,7 +240,7 @@ bash ~/.claude/logger.sh checkpoint "等待用户审阅 PRD" "orchestrator"
 
 | Agent | CLI | Prompt 模板 | 调用格式 |
 |-------|-----|------------|--------|
-| PM | Claude | `pm-generate-prd.txt` | `claude -p "$(cat template)" --output-format json` |
+| PM | Claude | `pm-generate-prd.txt` / `pm-design-spec.txt` / `pm-product-doc.txt` | `claude -p "$(cat template)" --output-format json` |
 | Designer | Claude | `designer-figma-prompt.txt` | `claude -p "$(cat template)" --output-format json` |
 | FE | Gemini | `fe-review-prd.txt` / `fe-implementation.txt` | `gemini -p "$(cat template)" --yolo -o json` |
 | BE | Codex | `be-review-prd.txt` / `be-implementation.txt` | `codex exec --full-auto "$(cat template)"` |

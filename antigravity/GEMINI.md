@@ -36,6 +36,7 @@
 
 ## 参考文档
 - PRD: `doc/prd.md`
+- 设计规格书: `doc/design-spec.md`（UI/交互/组件/状态）
 - 前端计划: `doc/fe-plan.md`
 - 设计提示词: `doc/stitch-prompts.md`
 - 设计代码: `doc/stitch-code.html`

@@ -1,7 +1,7 @@
 # Multi-Agent Orchestrator — Claude CLI + Antigravity
 
 > PM/Designer/General 由 Claude(Antigravity) 执行，FE 由 Gemini 执行，BE/QA 由 Codex 执行。
-> 状态机自动推进，用户只需 4 次介入。
+> 状态机自动推进，用户只需 5 次介入。
 
 ## 快速开始
 
@@ -72,6 +72,8 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
 │       ├── fe-implementation.txt     ← 🆕 引用 impeccable 设计指南
 │       ├── design-review-plan.txt    ← 🆕 引用 impeccable 7 维度
 │       ├── design-review-visual.txt  ← 🆕 引用 impeccable 视觉基准
+│       ├── pm-design-spec.txt        ← 🆕 设计规格提取模板
+│       ├── pm-product-doc.txt        ← 🆕 产品文档生成模板（含流程图）
 │       └── general-add-reflection.txt
 └── workflows/                    ← 工作流触发器
     ├── start.md
@@ -125,13 +127,14 @@ python3 ~/.claude/orchestrator/graph.py visualize               # 输出 Mermaid
 python3 ~/.claude/orchestrator/graph.py status <project_dir>    # checkpoint + tracing 状态
 ```
 
-### 4. 工作流（4 次用户介入）
+### 4. 工作流（5 次用户介入）
 
 ```
 ① 描述概念 → PM 自动生成 PRD → 停在 PRD_DRAFT
-② "approved" → BE 审查 → FE 审查 → Designer 生成 Figma 提示词 → 停在 FIGMA_PROMPT
-③ "figma ready {url}" → QA 生成测试 → 出实现计划 → 停等 plan approved
-④ "plan approved" → FE+BE 并行编码 → QA 测试 → DONE
+② "approved" → CEO 审查 → BE 审查 → FE 审查 → Designer 生成 Stitch 提示词 → 停在 FIGMA_PROMPT
+③ "figma ready {url}" → PM 提取设计规格 + 更新 PRD → 停在 DESIGN_SPEC_REVIEW
+④ "approved" → QA 生成测试 → 出实现计划 → 停等 plan approved
+⑤ "plan approved" → FE+BE 并行编码 → 代码审查 → 安全审计 → QA 测试 → PM 生成产品文档 → DONE
 ```
 
 ### LangGraph 节点拓扑
@@ -216,7 +219,9 @@ export LANGSMITH_TRACING=true
 ├── state.json                ← 工作流状态（当前阶段 + 元数据）
 ├── idea.txt                  ← 用户概念描述
 ├── code-scan.md              ← Codex 代码扫描报告（onboard 时）
-├── prd.md                    ← PM 生成的 PRD
+├── prd.md                    ← PM 生成的 PRD（随流程增量更新）
+├── design-spec.md            ← 🆕 PM 提取的设计规格书（UI/交互/组件/状态）
+├── product-doc.md            ← 🆕 PM 生成的产品文档（含5类流程图）
 ├── figma-prompts.md          ← Designer 生成的 Figma 提示词
 ├── fe-plan.md                ← FE 审查 PRD 后的实现计划
 ├── test-plan.md              ← QA 生成的测试计划
@@ -236,7 +241,9 @@ export LANGSMITH_TRACING=true
 | 文件 | 产生者 | 时机 |
 |------|--------|------|
 | `state.json` | orchestrator.sh | init/onboard 创建，每次状态转换更新 |
-| `prd.md` | PM (Claude) | 生成或反向生成 PRD |
+| `prd.md` | PM (Claude) | 生成 → DESIGN_SPEC 增量更新 → PRODUCT_DOC 冻结 |
+| `design-spec.md` | PM (Claude) | 🆕 Stitch 完成后提取设计规格 |
+| `product-doc.md` | PM (Claude) | 🆕 开发完成后生成产品文档（含流程图） |
 | `code-scan.md` | Codex (BE) | onboard 扫描代码 |
 | `figma-prompts.md` | Designer (Claude) | PRD 批准后生成 |
 | `fe-plan.md` | FE (Gemini) | FE 审查 PRD 后 |

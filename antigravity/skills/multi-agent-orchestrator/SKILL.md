@@ -21,10 +21,11 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 | "onboard {path}" / "接入项目 {path}" | `bash ~/.claude/orchestrator.sh --ag onboard {path}` |
 | "approved" / "通过" | `bash ~/.claude/orchestrator.sh --ag signal approved {PROJECT_DIR}` |
 | "figma ready {url}" | `bash ~/.claude/orchestrator.sh --ag signal "figma ready {url}" {PROJECT_DIR}` |
+| "approved" (DESIGN_SPEC_REVIEW状态) | `bash ~/.claude/orchestrator.sh --ag signal approved {PROJECT_DIR}` |
 | "plan approved" | `bash ~/.claude/orchestrator.sh --ag signal "plan approved" {PROJECT_DIR}` |
 | "/status" / "查看状态" | `bash ~/.claude/orchestrator.sh --ag status {PROJECT_DIR}` |
 | "resume" / "恢复执行" | `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}` |
-| 项目描述文本 (IDEA状态) | `bash ~/.claude/orchestrator.sh --ag signal "{描述}" {PROJECT_DIR}` |
+| 项目描述文本 (IDEA状态) | `bash ~/.claude/orchestrator.sh --ag signal "描述" {PROJECT_DIR}` |
 
 ## CLAUDE_TASK_PENDING 处理流程
 
@@ -45,10 +46,12 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 ## 工作流概览
 
 ```
-IDEA(交互) → PRD_DRAFT(等审批) → PRD_REVIEW(BE/codex) → BE_APPROVED(FE/gemini)
-→ PRD_APPROVED(Designer/你执行) → FIGMA_PROMPT(等用户)
-→ DESIGN_READY(QA/codex) → TESTS_WRITTEN(等审批)
-→ IMPLEMENTATION(FE+BE并行) → QA_TESTING(codex) → QA_PASSED → DONE
+IDEA(交互) → PRD_DRAFT(等审批) → CEO_REVIEW → PRD_REVIEW(BE/codex) → BE_APPROVED(FE/gemini)
+→ DESIGN_PLAN_REVIEW → PRD_APPROVED(Designer/你执行) → FIGMA_PROMPT(等用户)
+→ DESIGN_SPEC(PM/你执行) → DESIGN_SPEC_REVIEW(等审批) → DESIGN_READY(QA/codex)
+→ TESTS_WRITTEN(等审批) → IMPLEMENTATION(FE+BE并行)
+→ CODE_REVIEW → SECURITY_AUDIT → QA_TESTING(codex)
+→ VISUAL_REVIEW → QA_PASSED(ship) → PRODUCT_DOC(PM/你执行) → DONE
 ```
 
 - **粗体状态** 由脚本调 codex/gemini
