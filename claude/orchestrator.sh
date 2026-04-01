@@ -22,6 +22,9 @@ TEMPLATES_DIR="${ORCHESTRATOR_HOME}/dispatch-templates"
 LOGGER="${HOME}/.claude/logger.sh"
 CHECKPOINT="${HOME}/.claude/checkpoint.sh"
 
+# Codex/Gemini 超时时间（秒），防止无限挂起
+CLI_TIMEOUT=${CLI_TIMEOUT:-600}
+
 # 驱动模式: cli (默认, 调 claude -p) 或 antigravity (Claude 任务由调用方自己做)
 DRIVER_MODE="cli"
 
@@ -56,9 +59,53 @@ NC='\033[0m'
 
 die() { echo -e "${RED}ERROR: $*${NC}" >&2; exit 1; }
 
+# macOS 兼容的 timeout 实现 (用 perl 替代 coreutils timeout)
+run_with_timeout() {
+  local secs="$1"; shift
+  local tmpout; tmpout=$(mktemp)
+  local pid exit_code=0
+
+  # 后台运行命令，输出 tee 到临时文件 + stderr
+  ( "$@" ) > "$tmpout" 2>&1 &
+  pid=$!
+
+  # 后台倒计时
+  (
+    local elapsed=0
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep 5
+      elapsed=$((elapsed + 5))
+      if [[ $elapsed -ge $secs ]]; then
+        echo -e "${RED}⏰ 超时 (${secs}s)，终止进程 PID=${pid}${NC}" >&2
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 2
+        kill -9 "$pid" 2>/dev/null || true
+        exit 1
+      fi
+      # 每 30 秒打印一次心跳
+      if (( elapsed % 30 == 0 )); then
+        echo -e "  ⏳ 已运行 ${elapsed}s / ${secs}s ..." >&2
+      fi
+    done
+  ) &
+  local timer_pid=$!
+
+  wait "$pid" 2>/dev/null
+  exit_code=$?
+
+  # 清理计时器
+  kill "$timer_pid" 2>/dev/null || true
+  wait "$timer_pid" 2>/dev/null || true
+
+  # 输出结果到 stdout
+  cat "$tmpout"
+  rm -f "$tmpout"
+  return $exit_code
+}
+
 check_project_dir() {
   [[ -n "$STATE_FILE" ]] || die "未设置项目路径。请传入 PROJECT_DIR 参数。"
-  [[ -f "$STATE_FILE" ]] || die "项目未初始化（缺少 $STATE_FILE）。请先运行: orchestrator.sh init <project_dir>"
+  [[ -f "$STATE_FILE" ]] || die "项目未初始化（缺少 ${STATE_FILE}）。请先运行: orchestrator.sh init <project_dir>"
 }
 
 get_state() {
@@ -295,8 +342,11 @@ run_with_fallback() {
       ;;
     codex)
       if which codex >/dev/null 2>&1; then
-        echo -e "${YELLOW}执行 Codex CLI...${NC}"
-        output=$(codex exec --full-auto "$prompt" 2>&1) || exit_code=$?
+        echo -e "${YELLOW}执行 Codex CLI (timeout=${CLI_TIMEOUT}s)...${NC}"
+        output=$(run_with_timeout "$CLI_TIMEOUT" codex exec --full-auto -C "$PROJECT_DIR" "$prompt" < /dev/null) || exit_code=$?
+        if [[ $exit_code -eq 137 || $exit_code -eq 143 ]]; then
+          echo -e "${RED}✗ Codex 超时被终止${NC}"
+        fi
       else
         echo -e "${YELLOW}Codex CLI 不可用${NC}"
         exit_code=1
@@ -304,8 +354,11 @@ run_with_fallback() {
       ;;
     gemini)
       if which gemini >/dev/null 2>&1; then
-        echo -e "${YELLOW}执行 Gemini CLI...${NC}"
-        output=$(gemini -p "$prompt" --yolo 2>&1) || exit_code=$?
+        echo -e "${YELLOW}执行 Gemini CLI (timeout=${CLI_TIMEOUT}s)...${NC}"
+        output=$(run_with_timeout "$CLI_TIMEOUT" gemini -p "$prompt" --yolo < /dev/null) || exit_code=$?
+        if [[ $exit_code -eq 137 || $exit_code -eq 143 ]]; then
+          echo -e "${RED}✗ Gemini 超时被终止${NC}"
+        fi
       else
         echo -e "${YELLOW}Gemini CLI 不可用${NC}"
         exit_code=1
@@ -603,9 +656,9 @@ cmd_onboard() {
 
   local scan_exit=0
   if which codex >/dev/null 2>&1; then
-    echo -e "${YELLOW}执行 Codex 扫描...${NC}"
+    echo -e "${YELLOW}执行 Codex 扫描 (timeout=${CLI_TIMEOUT}s)...${NC}"
     cd "$PROJECT_DIR"
-    codex exec --full-auto "$scan_prompt" 2>&1 || scan_exit=$?
+    run_with_timeout "$CLI_TIMEOUT" codex exec --full-auto -C "$PROJECT_DIR" "$scan_prompt" < /dev/null 2>&1 || scan_exit=$?
     if [[ $scan_exit -eq 0 ]]; then
       if [[ -x "$LOGGER" ]]; then
         bash "$LOGGER" agent_done "代码扫描完成" "be" 2>/dev/null || true
@@ -756,7 +809,7 @@ cmd_auto_run() {
           local tmpdir; tmpdir=$(mktemp -d)
           (
             if which gemini >/dev/null 2>&1; then
-              cd "$PROJECT_DIR" && gemini -p "$fe_prompt" --yolo > "${tmpdir}/fe.log" 2>&1
+              cd "$PROJECT_DIR" && run_with_timeout "$CLI_TIMEOUT" gemini -p "$fe_prompt" --yolo < /dev/null > "${tmpdir}/fe.log" 2>&1
               echo $? > "${tmpdir}/fe.exit"
             else
               echo "Gemini CLI 不可用" > "${tmpdir}/fe.log"
@@ -767,7 +820,7 @@ cmd_auto_run() {
 
           (
             if which codex >/dev/null 2>&1; then
-              cd "$PROJECT_DIR" && codex exec --full-auto "$be_prompt" > "${tmpdir}/be.log" 2>&1
+              cd "$PROJECT_DIR" && run_with_timeout "$CLI_TIMEOUT" codex exec --full-auto -C "$PROJECT_DIR" "$be_prompt" < /dev/null > "${tmpdir}/be.log" 2>&1
               echo $? > "${tmpdir}/be.exit"
             else
               echo "Codex CLI 不可用" > "${tmpdir}/be.log"

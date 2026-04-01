@@ -39,3 +39,4 @@
 - 前端计划: `doc/fe-plan.md`
 - 设计提示词: `doc/stitch-prompts.md`
 - 设计代码: `doc/stitch-code.html`
+- 文本布局/性能优化参考: `doc/pretext-analysis.md`（特别关注"前端开发参考手册"章节）
