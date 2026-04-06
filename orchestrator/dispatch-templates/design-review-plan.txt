@@ -54,7 +54,24 @@
 - ❌ 不要跳过空状态和错误状态的审查
 - ❌ 不要给出模糊建议（"考虑优化一下"），要给具体方案
 
-{{SKILLS_INJECTION}}
+## 🎨 设计技能（必读）
+
+**开始审查前**，先读取核心设计 skill 作为审查基准：
+```bash
+cat ~/.claude/skills/frontend-design/SKILL.md
+```
+
+按需读取 7 维度参考文件（对应你的审查维度）：
+
+| 审查维度 | 参考文件 |
+|---------|---------|
+| Pass 1 信息架构 | `~/.claude/skills/frontend-design/reference/spatial-design.md` |
+| Pass 2 交互状态 | `~/.claude/skills/frontend-design/reference/interaction-design.md` |
+| Pass 3 用户旅程 | `~/.claude/skills/frontend-design/reference/ux-writing.md` |
+| Pass 4 AI Slop | `~/.claude/skills/frontend-design/SKILL.md` 中的反面模式清单（**必读**） |
+| Pass 5 设计系统 | `~/.claude/skills/normalize/SKILL.md` `~/.claude/skills/extract/SKILL.md` |
+| Pass 6 响应式 | `~/.claude/skills/frontend-design/reference/responsive-design.md` |
+| Pass 7 未决决策 | `~/.claude/skills/critique/SKILL.md` |
 
 ## PRD 内容
 

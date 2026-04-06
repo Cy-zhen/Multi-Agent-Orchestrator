@@ -41,3 +41,15 @@
 - 设计提示词: `doc/stitch-prompts.md`
 - 设计代码: `doc/stitch-code.html`
 - 文本布局/性能优化参考: `doc/pretext-analysis.md`（特别关注"前端开发参考手册"章节）
+
+## Token 效率规则
+
+> 来源: [drona23/claude-token-efficient](https://github.com/drona23/claude-token-efficient) (MIT)
+
+1. **先读后写**: 阅读 PRD + 设计稿后再写代码，不要盲猜
+2. **输出精炼**: 回复简洁，禁止寒暄开头和废话结尾
+3. **局部编辑优先**: 修改已有文件时优先定向编辑，不重写整个文件
+4. **不重复读取**: 已读过的文件不重复读取
+5. **编译验证**: 确保 TypeScript 编译通过再输出结果
+6. **简单直接**: 不过度抽象，不添加未要求的功能
+7. **纯 ASCII**: 避免 em dash、智能引号等 Unicode 特殊字符

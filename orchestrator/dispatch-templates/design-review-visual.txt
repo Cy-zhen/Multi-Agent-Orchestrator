@@ -60,7 +60,27 @@
 - 风险超过 20% 时停止，询问用户
 - 最多修复 30 个问题
 
-{{SKILLS_INJECTION}}
+## 🎨 设计技能（必读）
+
+**开始审查前**，先读取核心设计 skill：
+```bash
+cat ~/.claude/skills/frontend-design/SKILL.md
+```
+
+按审查维度按需读取：
+
+| 审查维度 | 参考技能/文件 |
+|---------|------------|
+| 排版 | `~/.claude/skills/frontend-design/reference/typography.md` 或 `~/.claude/skills/typeset/SKILL.md` |
+| 颜色 | `~/.claude/skills/frontend-design/reference/color-and-contrast.md` 或 `~/.claude/skills/colorize/SKILL.md` |
+| 间距 | `~/.claude/skills/frontend-design/reference/spatial-design.md` 或 `~/.claude/skills/arrange/SKILL.md` |
+| 布局 | `~/.claude/skills/arrange/SKILL.md` |
+| 交互状态 | `~/.claude/skills/frontend-design/reference/interaction-design.md` |
+| 响应式 | `~/.claude/skills/adapt/SKILL.md` |
+| 动效 | `~/.claude/skills/frontend-design/reference/motion-design.md` 或 `~/.claude/skills/animate/SKILL.md` |
+| 最终打磨 | `~/.claude/skills/polish/SKILL.md` |
+
+所有视觉修复必须避免 AI Slop（详见 frontend-design SKILL.md 中的反面模式清单）。
 
 ## 站点 URL
 

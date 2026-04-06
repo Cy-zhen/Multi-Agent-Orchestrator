@@ -315,3 +315,29 @@ python3 ~/.claude/orchestrator/graph.py resume ~/my-project
 - `design-review-plan.txt` — 7 维度设计审查对齐 impeccable
 - `design-review-visual.txt` — 80 项视觉审查引用 impeccable 基准
 - `fe-implementation.txt` — FE 编码时参考 impeccable 设计指南
+
+---
+
+### 12. Token 效率规则 🆕
+
+> 来源：[drona23/claude-token-efficient](https://github.com/drona23/claude-token-efficient) (MIT, ⭐2.6k)
+
+社区验证的 Claude 输出 token 优化规则，平均减少 ~63% 无效输出。适配多 Agent 编排场景后集成到所有配置文件。
+
+**核心规则：**
+1. 先思考再行动 — 读取已有文件再写代码
+2. 输出精炼 — 禁止拍马屁开头和废话结尾
+3. 局部编辑优先 — 不重写整个文件
+4. 不重复读取 — 已读文件不重复读取
+5. 测试后交付 — 代码完成前必须验证
+6. 简单直接 — 不过度工程
+7. 用户指令优先 — 用户明确指令覆盖一切
+8. 纯 ASCII — 避免 em dash、智能引号等特殊字符
+
+**同步位置：**
+
+| 文件 | 说明 |
+|------|------|
+| `~/.claude/CLAUDE.md` | Claude 全局配置（Orchestrator + PM/Designer/General） |
+| `antigravity/GEMINI.md` | Gemini FE Agent 配置 |
+| `antigravity/skills/multi-agent-orchestrator/SKILL.md` | Orchestrator 技能定义（Antigravity 使用） |

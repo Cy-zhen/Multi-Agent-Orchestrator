@@ -582,3 +582,5 @@ cat doc/logs/summary.md
 9. **Gstack 全部走 Claude**：所有 gstack skills 均通过 Claude CLI 执行，不走 Codex/Gemini
 10. **质量关卡不跳过**：CEO_REVIEW 和 CODE_REVIEW 为必经节点，不可 skip
 11. **设计质量**：所有涉及 UI/前端的设计审查和实现必须参考 impeccable frontend-design skill，避免 AI Slop
+12. **被动技能强制**（借鉴: Superpowers/Using-Superpowers）：所有 dispatch template 中标记为"被动技能"的指令块，Agent **不得跳过**。如果 Agent 输出中没有体现被动技能的执行（如 TDD 循环的测试运行记录、验证清单确认），视为不合格输出
+13. **SKILLS_INJECTION 机制**：所有 template 中的 `{{SKILLS_INJECTION}}` 占位符用于注入被动技能内容。dispatch-agent 加载模板时自动填充。被动技能来源和映射关系见 `~/.claude/orchestrator/superpowers-passive-skills.md`
