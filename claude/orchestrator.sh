@@ -32,6 +32,7 @@ DRIVER_MODE="cli"
 PROJECT_DIR=""
 STATE_FILE=""
 LOG_DIR=""
+FALLBACK_QUEUE_FILE=""
 
 # 设置项目路径
 set_project_dir() {
@@ -44,6 +45,7 @@ set_project_dir() {
   PROJECT_DIR="$(cd "$dir" && pwd)"
   STATE_FILE="${PROJECT_DIR}/doc/state.json"
   LOG_DIR="${PROJECT_DIR}/doc/logs"
+  FALLBACK_QUEUE_FILE="${PROJECT_DIR}/doc/.manual-takeover-queue.json"
 }
 
 # ---------- 颜色 ----------
@@ -114,6 +116,163 @@ get_state() {
 
 get_field() {
   jq -r ".$1 // \"\"" "$STATE_FILE"
+}
+
+read_doc_file() {
+  local rel="$1"
+  cat "${PROJECT_DIR}/${rel}" 2>/dev/null || true
+}
+
+get_skills_root() {
+  local executor="$1"
+  case "$executor" in
+    gemini)      echo "${HOME}/.gemini/skills";;
+    codex)       echo "${HOME}/.codex/skills";;
+    claude)      echo "${HOME}/.claude/skills";;
+    antigravity) echo "${HOME}/.gemini/antigravity/skills";;
+    *)           echo "${HOME}/.claude/skills";;
+  esac
+}
+
+get_executor_chain() {
+  local role="$1"
+  local primary="$2"
+  case "$role" in
+    FE)
+      if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+        echo "${primary} antigravity"
+      else
+        echo "${primary} claude"
+      fi
+      ;;
+    BE|QA)
+      if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+        echo "${primary} antigravity"
+      else
+        echo "${primary} claude"
+      fi
+      ;;
+    *)
+      if [[ "$DRIVER_MODE" == "antigravity" ]]; then
+        echo "antigravity"
+      else
+        echo "${primary}"
+      fi
+      ;;
+  esac
+}
+
+template_optional_placeholders_for() {
+  local template="$1"
+  case "$template" in
+    fe-implementation.txt|be-implementation.txt)
+      echo "FEATURE_NAME DESIGN_CODE REFLECTION"
+      ;;
+    be-review-prd.txt|fe-review-prd.txt)
+      echo ""
+      ;;
+    *)
+      echo "FEATURE_NAME DESIGN_CODE REFLECTION FE_PLAN BE_PLAN TEST_PLAN FAILURE_CONTEXT SITE_URL TIME_RANGE"
+      ;;
+  esac
+}
+
+render_template_file() {
+  local template_path="$1"
+  local role="$2"
+  local executor="$3"
+
+  [[ -f "$template_path" ]] || die "模板不存在: ${template_path}"
+
+  local prompt
+  prompt=$(cat "$template_path")
+
+  local feature_name figma_url fe_plan be_plan reflection design_code test_plan failure_context site_url time_range skills_root
+  feature_name=$(jq -r '.feature_name // .project // empty' "$STATE_FILE" 2>/dev/null || true)
+  [[ -z "$feature_name" ]] && feature_name=$(basename "$PROJECT_DIR")
+  figma_url=$(get_field figma_url)
+  fe_plan=$(read_doc_file "doc/fe-plan.md")
+  be_plan=$(read_doc_file "doc/be-plan.md")
+  reflection=$(read_doc_file "doc/reflection.md")
+  design_code=$(read_doc_file "doc/stitch-code.html")
+  test_plan=$(read_doc_file "doc/tests/test-plan.md")
+  [[ -z "$test_plan" ]] && test_plan=$(read_doc_file "doc/test-plan.md")
+  failure_context=$(read_doc_file "doc/qa-report.md")
+  site_url=$(get_field site_url)
+  time_range=$(get_field time_range)
+  skills_root=$(get_skills_root "$executor")
+
+  prompt="${prompt//\{\{PROJECT_DIR\}\}/$PROJECT_DIR}"
+  prompt="${prompt//\{\{PRD_CONTENT\}\}/$(read_doc_file "doc/prd.md")}"
+  prompt="${prompt//\{\{FIGMA_URL\}\}/$figma_url}"
+  prompt="${prompt//\{\{TEST_PLAN\}\}/$test_plan}"
+  prompt="${prompt//\{\{FE_PLAN\}\}/$fe_plan}"
+  prompt="${prompt//\{\{BE_PLAN\}\}/$be_plan}"
+  prompt="${prompt//\{\{FAILURE_CONTEXT\}\}/$failure_context}"
+  prompt="${prompt//\{\{SITE_URL\}\}/$site_url}"
+  prompt="${prompt//\{\{TIME_RANGE\}\}/$time_range}"
+  prompt="${prompt//\{\{FEATURE_NAME\}\}/$feature_name}"
+  prompt="${prompt//\{\{DESIGN_CODE\}\}/$design_code}"
+  prompt="${prompt//\{\{REFLECTION\}\}/$reflection}"
+  prompt="${prompt//\{\{SKILLS_ROOT\}\}/$skills_root}"
+  prompt="${prompt//\{\{SKILLS_INJECTION\}\}/优先参考 ${skills_root} 中与当前角色(${role})相关的 skills；如果该执行器目录下没有对应 skill，再按项目约束继续执行。}"
+
+  local optional
+  for optional in $(template_optional_placeholders_for "$(basename "$template_path")"); do
+    prompt="${prompt//\{\{${optional}\}\}/}"
+  done
+
+  local unresolved
+  unresolved=$(printf "%s" "$prompt" | grep -o '{{[A-Z_][A-Z_0-9]*}}' | sort -u || true)
+  if [[ -n "$unresolved" ]]; then
+    echo -e "${RED}模板变量缺失:$(printf '\n%s' "$unresolved")${NC}" >&2
+    return 1
+  fi
+
+  printf "%s" "$prompt"
+}
+
+queue_manual_takeover() {
+  local role="$1"
+  local action="$2"
+  local template="$3"
+  local executor="$4"
+  local fallback_from="$5"
+  local next_state="$6"
+  local prompt="$7"
+
+  local prompt_file="${PROJECT_DIR}/doc/.queued-${role,,}-task.md"
+  printf "%s" "$prompt" > "$prompt_file"
+
+  cat > "$FALLBACK_QUEUE_FILE" << EOF
+{
+  "role": "${role}",
+  "action": "${action}",
+  "template": "${template}",
+  "executor": "${executor}",
+  "fallback_from": "${fallback_from}",
+  "next_state_on_success": "${next_state}",
+  "prompt_file": "${prompt_file}"
+}
+EOF
+}
+
+emit_queued_manual_takeover_if_any() {
+  [[ -f "$FALLBACK_QUEUE_FILE" ]] || return 1
+
+  local role action template executor fallback_from next_state prompt_file prompt
+  role=$(jq -r '.role' "$FALLBACK_QUEUE_FILE")
+  action=$(jq -r '.action' "$FALLBACK_QUEUE_FILE")
+  template=$(jq -r '.template' "$FALLBACK_QUEUE_FILE")
+  executor=$(jq -r '.executor' "$FALLBACK_QUEUE_FILE")
+  fallback_from=$(jq -r '.fallback_from // ""' "$FALLBACK_QUEUE_FILE")
+  next_state=$(jq -r '.next_state_on_success // ""' "$FALLBACK_QUEUE_FILE")
+  prompt_file=$(jq -r '.prompt_file' "$FALLBACK_QUEUE_FILE")
+  prompt=$(cat "$prompt_file")
+
+  rm -f "$FALLBACK_QUEUE_FILE" "$prompt_file"
+  _emit_claude_task_pending "$prompt" "$role" "$(get_state)" "$action" "$template" "$executor" "$fallback_from" "$next_state"
+  return 0
 }
 
 set_state() {
@@ -228,8 +387,8 @@ cmd_status() {
   echo -e "║ 状态:       ${CYAN}${state}${NC}"
   echo -e "║ 节点类型:   ${YELLOW}${node_type}${NC}"
   echo -e "║ 等待 Agent: ${BLUE}${agent}${NC}"
-  echo -e "║ CLI:        ${cli}"
-  echo -e "║ 技能:       ${skill}"
+  echo -e "║ 主执行器:   ${cli}"
+  echo -e "║ 动作:       ${skill}"
   echo -e "║ 模板:       ${template}"
   echo -e "║ 调查次数:   ${reflection_count}/3"
   echo -e "║ 项目目录:   $(pwd)"
@@ -318,30 +477,32 @@ cmd_transition() {
   set_state "$to_state"
 }
 
-# ---------- CLI 回退执行函数 ----------
-# run_with_fallback <cli> <prompt> <agent> [state] [skill] [template]
-# 先尝试指定 CLI，失败后回退到 Claude/Antigravity
-# 返回: 0=成功, 1=失败
-# 输出存入全局变量 FALLBACK_OUTPUT
+# ---------- Role / Executor 执行函数 ----------
+# run_with_executor <executor> <prompt> <role> [state] [action] [template] [fallback_from] [next_state]
+# 返回: 0=成功, 1=失败, 99=写入 CLAUDE_TASK_PENDING
 FALLBACK_OUTPUT=""
-run_with_fallback() {
-  local cli="$1"
+run_with_executor() {
+  local executor="$1"
   local prompt="$2"
-  local agent="${3:-unknown}"
+  local role="${3:-unknown}"
   local state="${4:-}"
-  local skill="${5:-}"
+  local action="${5:-}"
   local template="${6:-}"
+  local fallback_from="${7:-}"
+  local next_state="${8:-}"
 
   local output=""
   local exit_code=0
 
-  # --- 第一轮：尝试原始 CLI ---
-  case "$cli" in
+  case "$executor" in
+    antigravity)
+      _emit_claude_task_pending "$prompt" "$role" "$state" "$action" "$template" "$executor" "$fallback_from" "$next_state"
+      return 99
+      ;;
     claude)
       if [[ "$DRIVER_MODE" == "antigravity" ]]; then
-        # Antigravity 模式: 直接走 CLAUDE_TASK_PENDING
-        _emit_claude_task_pending "$prompt" "$agent" "$state" "$skill" "$template"
-        return 99  # 特殊返回码：表示已写 TASK_PENDING，需要调用方退出
+        _emit_claude_task_pending "$prompt" "$role" "$state" "$action" "$template" "antigravity" "${fallback_from:-claude}" "$next_state"
+        return 99
       fi
       echo -e "${YELLOW}执行 Claude CLI...${NC}"
       output=$(claude -p "$prompt" --output-format json 2>&1) || exit_code=$?
@@ -371,48 +532,50 @@ run_with_fallback() {
       fi
       ;;
     *)
-      echo -e "${RED}未知 CLI: ${cli}${NC}"
+      echo -e "${RED}未知执行器: ${executor}${NC}"
       exit_code=1
       ;;
   esac
 
-  # --- 成功则直接返回 ---
   if [[ $exit_code -eq 0 ]]; then
-    echo -e "${GREEN}✓ ${cli} 执行成功${NC}"
+    echo -e "${GREEN}✓ ${executor} 执行成功${NC}"
     FALLBACK_OUTPUT="$output"
     return 0
   fi
 
-  # --- 第二轮：回退到 Claude/Antigravity ---
-  # 只对 gemini/codex 失败进行回退 (claude 失败不回退)
-  if [[ "$cli" == "claude" ]]; then
-    echo -e "${RED}✗ Claude CLI 执行失败 (exit: ${exit_code})${NC}"
-    FALLBACK_OUTPUT="$output"
-    return $exit_code
-  fi
-
-  echo -e "${YELLOW}⚠ ${cli} 执行失败 (exit: ${exit_code})，启动回退...${NC}"
+  echo -e "${YELLOW}⚠ ${executor} 执行失败 (exit: ${exit_code})${NC}"
   if [[ -x "$LOGGER" ]]; then
-    bash "$LOGGER" warn "${cli} 失败(exit=${exit_code})，回退到 Claude" "orchestrator" 2>/dev/null || true
+    bash "$LOGGER" warn "role=${role} executor=${executor} 失败(exit=${exit_code})" "orchestrator" 2>/dev/null || true
   fi
 
-  if [[ "$DRIVER_MODE" == "antigravity" ]]; then
-    # Antigravity 模式: 写任务文件让调用方执行
-    _emit_claude_task_pending "$prompt" "$agent" "$state" "$skill" "$template"
-    return 99  # 特殊返回码
-  fi
+  FALLBACK_OUTPUT="$output"
+  return $exit_code
+}
 
-  # CLI 模式: 回退到 claude -p
-  echo -e "${YELLOW}回退: 使用 Claude CLI 执行 ${agent} 任务...${NC}"
-  output=""
-  exit_code=0
-  output=$(claude -p "$prompt" --output-format json 2>&1) || exit_code=$?
+# run_role_with_fallback <role> <primary_executor> <prompt> [state] [action] [template] [next_state]
+run_role_with_fallback() {
+  local role="$1"
+  local primary_executor="$2"
+  local prompt="$3"
+  local state="${4:-}"
+  local action="${5:-}"
+  local template="${6:-}"
+  local next_state="${7:-}"
+  local output=""
+  local exit_code=1
+  local fallback_from=""
+  local executor
 
-  if [[ $exit_code -eq 0 ]]; then
-    echo -e "${GREEN}✓ Claude CLI 回退执行成功${NC}"
-  else
-    echo -e "${RED}✗ Claude CLI 回退也失败 (exit: ${exit_code})${NC}"
-  fi
+  for executor in $(get_executor_chain "$role" "$primary_executor"); do
+    run_with_executor "$executor" "$prompt" "$role" "$state" "$action" "$template" "$fallback_from" "$next_state"
+    exit_code=$?
+    if [[ $exit_code -eq 0 || $exit_code -eq 99 ]]; then
+      return $exit_code
+    fi
+    output="$FALLBACK_OUTPUT"
+    fallback_from="$executor"
+    echo -e "${YELLOW}→ 继续回退: role=${role} ${executor} -> 下一个执行器${NC}"
+  done
 
   FALLBACK_OUTPUT="$output"
   return $exit_code
@@ -421,12 +584,14 @@ run_with_fallback() {
 # 写 CLAUDE_TASK_PENDING 文件 (内部辅助函数)
 _emit_claude_task_pending() {
   local prompt="$1"
-  local agent="${2:-}"
+  local role="${2:-}"
   local state="${3:-}"
-  local skill="${4:-}"
+  local action="${4:-}"
   local template="${5:-}"
-  local nxt
-  nxt=$(next_state "$state" true 2>/dev/null || echo "")
+  local executor="${6:-antigravity}"
+  local fallback_from="${7:-}"
+  local nxt="${8:-}"
+  [[ -z "$nxt" ]] && nxt=$(next_state "$state" true 2>/dev/null || echo "")
 
   local task_file="${PROJECT_DIR}/doc/.claude-task.md"
   echo "$prompt" > "$task_file"
@@ -434,10 +599,15 @@ _emit_claude_task_pending() {
   cat > "${PROJECT_DIR}/doc/.claude-task-meta.json" << META
 {
   "state": "${state}",
-  "agent": "${agent}",
-  "skill": "${skill}",
+  "agent": "${role}",
+  "role": "${role}",
+  "skill": "${action}",
+  "action": "${action}",
   "template": "${template}",
-  "next_state": "${nxt}"
+  "executor": "${executor}",
+  "fallback_from": "${fallback_from}",
+  "next_state": "${nxt}",
+  "next_state_on_success": "${nxt}"
 }
 META
 
@@ -445,14 +615,17 @@ META
   echo -e "${YELLOW}══════════════════════════════════════${NC}"
   echo -e "${YELLOW}  CLAUDE_TASK_PENDING${NC}"
   echo -e "${YELLOW}══════════════════════════════════════${NC}"
-  echo -e "Agent: ${agent} | Skill: ${skill}"
+  echo -e "Role: ${role} | Action: ${action} | Executor: ${executor}"
+  [[ -n "$fallback_from" ]] && echo -e "Fallback From: ${fallback_from}"
   echo -e "Prompt 已写入: ${task_file}"
   echo -e "下一状态: ${nxt}"
   echo -e ""
-  echo -e "请你(Antigravity)作为 Claude 执行以下任务:"
+  echo -e "请你以 ${role} 角色执行以下任务:"
   echo -e "1. 读取 ${task_file} 中的 prompt"
-  echo -e "2. 按照 prompt 的要求执行任务"
-  echo -e "3. 完成后运行: orchestrator.sh auto-run --ag ${PROJECT_DIR}"
+  echo -e "2. 读取 ${PROJECT_DIR}/doc/.claude-task-meta.json"
+  echo -e "3. 按照 prompt 的要求执行任务"
+  echo -e "4. 完成后先运行: orchestrator.sh --ag transition ${nxt} ${PROJECT_DIR}"
+  echo -e "5. 再运行: orchestrator.sh --ag auto-run ${PROJECT_DIR}"
   echo -e "${YELLOW}══════════════════════════════════════${NC}"
 }
 
@@ -476,26 +649,16 @@ cmd_dispatch() {
     die "模板不存在: ${template_path}"
   fi
 
-  # 变量替换
   local prompt
-  prompt=$(cat "$template_path")
-  prompt="${prompt//\{\{PROJECT_DIR\}\}/$(pwd)}"
-  prompt="${prompt//\{\{PRD_CONTENT\}\}/$(cat doc/prd.md 2>/dev/null || echo '[PRD not found]')}"
-  prompt="${prompt//\{\{FIGMA_URL\}\}/$(get_field figma_url)}"
-  prompt="${prompt//\{\{TEST_PLAN\}\}/$(cat doc/test-plan.md 2>/dev/null || echo '[Test plan not found]')}"
-  prompt="${prompt//\{\{FE_PLAN\}\}/$(cat doc/fe-plan.md 2>/dev/null || echo '[FE plan not found]')}"
-  prompt="${prompt//\{\{FAILURE_CONTEXT\}\}/$(cat doc/qa-report.md 2>/dev/null || echo '[No failure context]')}"
-  prompt="${prompt//\{\{SITE_URL\}\}/$(get_field site_url)}"
-  prompt="${prompt//\{\{TIME_RANGE\}\}/$(get_field time_range)}"
-  prompt="${prompt//\{\{SKILLS_INJECTION\}\}/使用 .claude/skills/gstack/ 中的相关 skill 作为参考。}"
+  prompt=$(render_template_file "$template_path" "$agent" "$cli") || return 1
 
-  echo -e "${BLUE}派发 Agent: ${agent} | Skill: ${skill} | CLI: ${cli}${NC}"
+  echo -e "${BLUE}派发 Role: ${agent} | Action: ${skill} | Primary Executor: ${cli}${NC}"
   echo -e "${CYAN}模板: ${template}${NC}"
   echo ""
 
   # 执行（带回退）
   cd "$PROJECT_DIR"
-  run_with_fallback "$cli" "$prompt" "$agent" "$state" "$skill" "$template"
+  run_role_with_fallback "$agent" "$cli" "$prompt" "$state" "$skill" "$template"
   local exit_code=$?
 
   if [[ $exit_code -eq 99 ]]; then
@@ -513,7 +676,7 @@ cmd_dispatch() {
 
   # 日志
   if [[ -x "$LOGGER" ]]; then
-    "$LOGGER" agent_dispatch "agent=${agent} skill=${skill} cli=${cli} exit=${exit_code}"
+    "$LOGGER" agent_dispatch "role=${agent} action=${skill} primary_executor=${cli} exit=${exit_code}"
   fi
 
   return $exit_code
@@ -706,7 +869,8 @@ cmd_onboard() {
 
   if [[ "$DRIVER_MODE" == "antigravity" ]]; then
     # Antigravity 模式：使用统一的 _emit_claude_task_pending 辅助函数
-    _emit_claude_task_pending "$prd_prompt" "PM" "IDEA" "/generate-prd" "pm-generate-prd.txt"
+    _emit_claude_task_pending "$prd_prompt" "PM" "IDEA" "/generate-prd" "pm-generate-prd.txt" "antigravity" "" "PRD_DRAFT"
+    return 0
   elif which claude >/dev/null 2>&1; then
     echo -e "${YELLOW}执行 Claude PM...${NC}"
     claude -p "$prd_prompt" --output-format json 2>&1 || echo -e "${RED}Claude PM 失败${NC}"
@@ -755,6 +919,11 @@ cmd_auto_run() {
 
     local state
     state=$(get_state)
+
+    if [[ "$state" == "IMPLEMENTATION" ]] && emit_queued_manual_takeover_if_any; then
+      return 0
+    fi
+
     local info
     info=$(lookup_state "$state")
     local node_type agent cli skill template
@@ -793,20 +962,13 @@ cmd_auto_run() {
           # 构造 prompts
           local fe_prompt be_prompt
           if [[ -f "$fe_template" ]]; then
-            fe_prompt=$(cat "$fe_template")
-            fe_prompt="${fe_prompt//\{\{PROJECT_DIR\}\}/$PROJECT_DIR}"
-            fe_prompt="${fe_prompt//\{\{PRD_CONTENT\}\}/$(cat "${PROJECT_DIR}/doc/prd.md" 2>/dev/null || echo '[No PRD]')}"
-            fe_prompt="${fe_prompt//\{\{FIGMA_URL\}\}/$(get_field figma_url)}"
-            fe_prompt="${fe_prompt//\{\{FE_PLAN\}\}/$(cat "${PROJECT_DIR}/doc/fe-plan.md" 2>/dev/null || echo '[No FE plan]')}"
+            fe_prompt=$(render_template_file "$fe_template" "FE" "gemini") || return 1
           else
             fe_prompt="按照 ${PROJECT_DIR}/doc/prd.md 实现前端功能。"
           fi
 
           if [[ -f "$be_template" ]]; then
-            be_prompt=$(cat "$be_template")
-            be_prompt="${be_prompt//\{\{PROJECT_DIR\}\}/$PROJECT_DIR}"
-            be_prompt="${be_prompt//\{\{PRD_CONTENT\}\}/$(cat "${PROJECT_DIR}/doc/prd.md" 2>/dev/null || echo '[No PRD]')}"
-            be_prompt="${be_prompt//\{\{TEST_PLAN\}\}/$(cat "${PROJECT_DIR}/doc/tests/test-plan.md" 2>/dev/null || cat "${PROJECT_DIR}/doc/test-plan.md" 2>/dev/null || echo '[No test plan]')}"
+            be_prompt=$(render_template_file "$be_template" "BE" "codex") || return 1
           else
             be_prompt="按照 ${PROJECT_DIR}/doc/prd.md 实现后端功能。"
           fi
@@ -868,31 +1030,30 @@ cmd_auto_run() {
               # Antigravity 模式：写 TASK_PENDING，一次只能一个
               # 优先回退 FE（因为后续 BE 也会回退）
               if [[ "$need_fe_fallback" == true ]]; then
-                echo -e "${YELLOW}Gemini FE 失败，回退到 Antigravity 执行 FE 任务${NC}"
-                _emit_claude_task_pending "$fe_prompt" "FE" "$state" "/figma-to-code" "fe-implementation.txt"
-                # 如果 BE 也失败，写入提示让用户知道还需要回退 BE
+                echo -e "${YELLOW}Gemini FE 失败，回退到 Antigravity 执行 FE 角色任务${NC}"
                 if [[ "$need_be_fallback" == true ]]; then
-                  echo -e "${YELLOW}注意: BE 也需要回退。FE 完成后请再次运行 auto-run 触发 BE 回退。${NC}"
-                  # 把 BE 需要回退的信息写入 state
-                  local tmp; tmp=$(mktemp)
-                  jq '.pending_be_fallback = true' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+                  echo -e "${YELLOW}BE 也需要人工接管，已加入手动接管队列。${NC}"
+                  queue_manual_takeover "BE" "/figma-to-code" "be-implementation.txt" "antigravity" "codex" "CODE_REVIEW" "$be_prompt"
+                  _emit_claude_task_pending "$fe_prompt" "FE" "$state" "/figma-to-code" "fe-implementation.txt" "antigravity" "gemini" "IMPLEMENTATION"
+                else
+                  _emit_claude_task_pending "$fe_prompt" "FE" "$state" "/figma-to-code" "fe-implementation.txt" "antigravity" "gemini" "CODE_REVIEW"
                 fi
                 return 0
               elif [[ "$need_be_fallback" == true ]]; then
-                echo -e "${YELLOW}Codex BE 失败，回退到 Antigravity 执行 BE 任务${NC}"
-                _emit_claude_task_pending "$be_prompt" "BE" "$state" "/figma-to-code" "be-implementation.txt"
+                echo -e "${YELLOW}Codex BE 失败，回退到 Antigravity 执行 BE 角色任务${NC}"
+                _emit_claude_task_pending "$be_prompt" "BE" "$state" "/figma-to-code" "be-implementation.txt" "antigravity" "codex" "CODE_REVIEW"
                 return 0
               fi
             else
               # CLI 模式：串行回退（Claude 不能并行）
               if [[ "$need_fe_fallback" == true ]]; then
-                echo -e "${YELLOW}Gemini FE 失败，回退到 Claude CLI 串行执行 FE...${NC}"
+                echo -e "${YELLOW}Gemini FE 失败，回退到 Claude CLI 串行执行 FE 角色...${NC}"
                 local fe_fallback_output
                 fe_fallback_output=$(claude -p "$fe_prompt" --output-format json 2>&1) && fe_ok=true || fe_ok=false
                 [[ "$fe_ok" == true ]] && echo -e "${GREEN}✓ FE Claude 回退成功${NC}" || echo -e "${RED}✗ FE Claude 回退也失败${NC}"
               fi
               if [[ "$need_be_fallback" == true ]]; then
-                echo -e "${YELLOW}Codex BE 失败，回退到 Claude CLI 串行执行 BE...${NC}"
+                echo -e "${YELLOW}Codex BE 失败，回退到 Claude CLI 串行执行 BE 角色...${NC}"
                 local be_fallback_output
                 be_fallback_output=$(claude -p "$be_prompt" --output-format json 2>&1) && be_ok=true || be_ok=false
                 [[ "$be_ok" == true ]] && echo -e "${GREEN}✓ BE Claude 回退成功${NC}" || echo -e "${RED}✗ BE Claude 回退也失败${NC}"
@@ -916,7 +1077,7 @@ cmd_auto_run() {
         fi
 
         # === 串行执行（带回退） ===
-        echo -e "${BLUE}═══ 派发: ${agent} → ${cli} ═══${NC}"
+        echo -e "${BLUE}═══ 派发 Role: ${agent} → Primary Executor: ${cli} ═══${NC}"
 
         # 日志：agent 开始
         if [[ -x "$LOGGER" ]]; then
@@ -926,24 +1087,15 @@ cmd_auto_run() {
         local template_path="${TEMPLATES_DIR}/${template}"
         local prompt
         if [[ -f "$template_path" ]]; then
-          prompt=$(cat "$template_path")
-          prompt="${prompt//\{\{PROJECT_DIR\}\}/$PROJECT_DIR}"
-          prompt="${prompt//\{\{PRD_CONTENT\}\}/$(cat "${PROJECT_DIR}/doc/prd.md" 2>/dev/null || echo '[No PRD]')}"
-          prompt="${prompt//\{\{FIGMA_URL\}\}/$(get_field figma_url)}"
-          prompt="${prompt//\{\{TEST_PLAN\}\}/$(cat "${PROJECT_DIR}/doc/tests/test-plan.md" 2>/dev/null || cat "${PROJECT_DIR}/doc/test-plan.md" 2>/dev/null || echo '[No test plan]')}"
-          prompt="${prompt//\{\{FE_PLAN\}\}/$(cat "${PROJECT_DIR}/doc/fe-plan.md" 2>/dev/null || echo '[No FE plan]')}"
-          prompt="${prompt//\{\{FAILURE_CONTEXT\}\}/$(cat "${PROJECT_DIR}/doc/qa-report.md" 2>/dev/null || echo '[No failure context]')}"
-          prompt="${prompt//\{\{SITE_URL\}\}/$(get_field site_url)}"
-          prompt="${prompt//\{\{TIME_RANGE\}\}/$(get_field time_range)}"
-          prompt="${prompt//\{\{SKILLS_INJECTION\}\}/使用 .claude/skills/gstack/ 中的相关 skill 作为参考。}"
+          prompt=$(render_template_file "$template_path" "$agent" "$cli") || return 1
         else
           prompt="执行 ${skill} 任务，项目目录: ${PROJECT_DIR}"
         fi
 
         cd "$PROJECT_DIR"
 
-        # 使用 run_with_fallback 执行（自动处理回退）
-        run_with_fallback "$cli" "$prompt" "$agent" "$state" "$skill" "$template"
+        # 按 role 执行（自动处理执行器回退）
+        run_role_with_fallback "$agent" "$cli" "$prompt" "$state" "$skill" "$template"
         local exit_code=$?
 
         if [[ $exit_code -eq 99 ]]; then
@@ -1044,11 +1196,8 @@ cmd_signal() {
       fi
 
       if [[ "$DRIVER_MODE" == "antigravity" ]]; then
-        local task_file="${PROJECT_DIR}/doc/.claude-task.md"
-        echo "$prompt" > "$task_file"
-        echo -e "${YELLOW}CLAUDE_TASK_PENDING: 请你执行 PRD 生成任务。${NC}"
-        echo -e "Prompt 在: ${task_file}"
-        echo -e "完成后将 PRD 写入 ${PROJECT_DIR}/doc/prd.md"
+        _emit_claude_task_pending "$prompt" "PM" "IDEA" "/generate-prd" "pm-generate-prd.txt" "antigravity" "" "PRD_DRAFT"
+        return 0
       elif which claude >/dev/null 2>&1; then
         cd "$PROJECT_DIR" && claude -p "$prompt" --output-format json 2>&1 || true
       fi

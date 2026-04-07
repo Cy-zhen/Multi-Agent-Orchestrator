@@ -3,6 +3,21 @@
 > PM/Designer/General 由 Claude(Antigravity) 执行，FE 由 Gemini 执行，BE/QA 由 Codex 执行。
 > 状态机自动推进，用户只需 5 次介入。
 
+## Runtime Truth
+
+- **真实运行入口**: `~/.claude/orchestrator.sh` 与 `~/.claude/orchestrator/`
+- 仓库中的 `claude/` 是当前 shell runtime 的开发副本
+- 仓库中的 `orchestrator/` 是 Python v2 / LangGraph 实验目录，不是当前 live runtime
+- **仓库修改不会自动同步到 live**
+- 如果只改仓库副本，不同步到 `~/.claude/...`，Antigravity 实际行为不会变化
+
+## Role / Executor Model
+
+- `role` 决定职责边界：PM / Designer / FE / BE / QA / General
+- `executor` 决定执行载体：`gemini` / `codex` / `claude` / `antigravity`
+- fallback 是 **同一 role 换 executor**，不是角色漂移
+- 例子：`FE@gemini` 失败后回退到 `FE@antigravity`
+
 ## 快速开始
 
 ### 1. 安装
@@ -36,7 +51,7 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
 │   ├── frontend-design/          ← 🆕 Impeccable 设计技能 (SKILL.md + 7 reference)
 │   ├── audit/ polish/ ...         ← 🆕 20 个 Impeccable 命令 skill
 │   └── gstack/                   ← 质量关卡技能
-├── orchestrator/                 ← 编排器核心（v2 Python）
+├── orchestrator/                 ← 实验性 Python v2 / LangGraph 目录（非当前 live）
 │   ├── SKILL.md                  ← 完整编排技能定义
 │   ├── state-machine.md          ← 状态机说明
 │   ├── logging.md                ← 日志格式说明
@@ -93,8 +108,9 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
     ├── frontend-design/
     └── audit/ polish/ ...
 
-项目仓库镜像/                      ← Git 跟踪用
-├── orchestrator/                 ← ~/.claude/orchestrator/ 的同步副本
+项目仓库副本/                      ← Git 跟踪用
+├── claude/orchestrator/          ← 当前 shell runtime 的仓库开发副本
+├── orchestrator/                 ← Python v2 / LangGraph 实验目录
 ├── antigravity/
 │   └── GEMINI.md                 ← Gemini CLI 角色定义（FE Agent）
 ├── claude/
@@ -106,9 +122,12 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
 
 #### 从 Antigravity 客户端（推荐）
 直接描述需求即可，Antigravity 会：
-1. 调用 `orchestrator.sh --ag <command>` 管理工作流
-2. 收到 `CLAUDE_TASK_PENDING` 时自己执行 Claude 任务（PM/Designer/General）
-3. Codex/Gemini 任务由脚本内部调用
+1. 先执行项目记忆预检：`bash ~/.project-memory/bin/pmem.sh status <project_dir>`
+2. 已注册项目时先询问是否加载；确认后执行 `bash ~/.project-memory/bin/pmem.sh load <project_dir>`
+3. 再调用 `orchestrator.sh --ag <command>` 管理工作流
+4. 收到 `CLAUDE_TASK_PENDING` 时自己执行 Claude 任务（PM/Designer/General）
+5. Codex/Gemini 任务由脚本内部调用
+6. 任务结束后若产生新的关键上下文，主动询问是否更新项目记忆
 
 #### 从 Claude CLI
 ```bash
@@ -119,7 +138,7 @@ claude  # 启动后直接描述需求，或：
 # "plan approved"
 ```
 
-#### LangGraph 版（v2 新增）
+#### LangGraph 版（实验）
 ```bash
 python3 ~/.claude/orchestrator/graph.py run <project_dir>       # 运行直到 USER_GATE
 python3 ~/.claude/orchestrator/graph.py resume <project_dir>    # 从 checkpoint 恢复
@@ -137,7 +156,7 @@ python3 ~/.claude/orchestrator/graph.py status <project_dir>    # checkpoint + t
 ⑤ "plan approved" → FE+BE 并行编码 → 代码审查 → 安全审计 → QA 测试 → PM 生成产品文档 → DONE
 ```
 
-### LangGraph 节点拓扑
+### Python v2 节点拓扑（实验）
 ```
 PM → PM_UserReview → BE_Review →|approved| FE_Review →|approved| Designer
                                  |rejected| PM          |rejected| PM
@@ -157,6 +176,14 @@ Implementation → QA_Test →|pass| END
 | BE | Codex CLI | `codex exec` | 后端代码 (.go) |
 | QA | Codex CLI | `codex exec` | 测试代码 + 测试执行 |
 
+### Fallback 规则
+
+- FE: `gemini` 失败时，CLI 模式回退到 `claude`，Antigravity 模式回退到 `antigravity`
+- BE/QA: `codex` 失败时，CLI 模式回退到 `claude`，Antigravity 模式回退到 `antigravity`
+- PM/Designer/General 在 `--ag` 模式下天然由 Antigravity 人工执行
+- 回退后 **role 不变**，只变 `executor`
+- `CLAUDE_TASK_PENDING` 表示同一 `role` 等待人工接管，不表示角色切换
+
 ### 6. 前置要求
 
 - **Claude CLI** (`claude`) — 已安装并登录
@@ -167,7 +194,7 @@ Implementation → QA_Test →|pass| END
 - **Git** — Codex 需要 git repo
 - **Impeccable 🆕** — 已安装到 `~/.claude/skills/`、`~/.gemini/skills/`、`~/.codex/skills/`
 
-#### Python 依赖（v2）
+#### Python 依赖（实验 v2）
 ```bash
 pip install langgraph langsmith langchain-core
 ```
@@ -278,7 +305,10 @@ python3 ~/.claude/orchestrator/graph.py resume ~/my-project
 
 ---
 
-### 10. v2 升级内容
+### 10. Python v2 实验内容
+
+> 下面这些能力主要对应 `项目/orchestrator/` 目录。
+> 当前 Antigravity 的主工作流仍然跑 `~/.claude/orchestrator.sh` 这条 shell runtime。
 
 | Phase | 内容 | 说明 |
 |-------|------|------|

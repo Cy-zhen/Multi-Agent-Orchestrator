@@ -21,12 +21,18 @@
 | `BE_APPROVED` | `AUTO` | FE | gemini | `/review-prd` | FE Agent | FE 从前端视角审查 PRD |
 | `PRD_APPROVED` | `AUTO` | Designer | claude | `/generate-stitch-prompt` | Designer | 生成 Stitch 设计提示词 |
 | `FIGMA_PROMPT` | `USER_GATE` | — | — | — | 用户 | 等待 Stitch 设计完成 |
+| `DESIGN_SPEC` | `AUTO` | PM | claude | `/extract-design-spec` | PM | 从 Figma / Stitch 结果提取设计规格并回写 PRD |
+| `DESIGN_SPEC_REVIEW` | `USER_GATE` | — | — | — | 用户 | 用户审阅设计规格与增量 PRD |
 | `DESIGN_READY` | `AUTO` | QA | codex | `/prepare-tests` | QA Agent | 生成测试计划 |
 | `TESTS_WRITTEN` | `PLAN_GATE` | — | — | — | 用户 | 用户审阅计划 |
 | `IMPLEMENTATION` | `AUTO` | FE+BE | gemini+codex | `/figma-to-code` | FE+BE 并行 | 前后端并行编码 |
+| `CODE_REVIEW` | `AUTO` | Gstack | claude | `/review` | Claude | Staff Engineer 代码审查 |
+| `SECURITY_AUDIT` | `AUTO` | Gstack | claude | `/cso` | Claude | OWASP + STRIDE 安全审计 |
 | `QA_TESTING` | `AUTO` | QA | codex | `/run-tests` | QA Agent | 执行自动化测试 |
-| `QA_PASSED` | `AUTO` | — | — | — | — | 自动 → DONE |
-| `QA_FAILED` | `AUTO` | General | claude | `/add-reflection` | General | 分析失败 (≤3次) |
+| `VISUAL_REVIEW` | `AUTO` | Gstack | claude | `/design-review` | Claude | 视觉审查与修复建议 |
+| `QA_PASSED` | `AUTO` | Gstack | claude | `/ship` | Claude | 发布准备完成 |
+| `PRODUCT_DOC` | `AUTO` | PM | claude | `/generate-product-doc` | PM | 生成产品文档并冻结 PRD |
+| `QA_FAILED` | `AUTO` | Gstack | claude | `/investigate` | Claude | 系统化 root-cause 调试（≤3次） |
 | `DONE` | — | — | — | — | — | 终止状态 |
 
 ---
@@ -42,15 +48,23 @@ PRD_REVIEW    AUTO         BE 审查通过                       BE_APPROVED    
 PRD_REVIEW    AUTO         BE 审查不通过                     PRD_DRAFT       BE(Codex)     be-review-prd.txt
 BE_APPROVED   AUTO         FE 审查通过                       PRD_APPROVED    FE(Gemini)    fe-review-prd.txt
 BE_APPROVED   AUTO         FE 审查不通过                     PRD_DRAFT       FE(Gemini)    fe-review-prd.txt
-PRD_APPROVED  AUTO         生成 Stitch 设计提示词               FIGMA_PROMPT    Designer      designer-figma-prompt.txt
-FIGMA_PROMPT  USER_GATE    用户说 "design ready {url}"         DESIGN_READY    用户信号       —
-DESIGN_READY  AUTO         QA 生成测试计划                   TESTS_WRITTEN   QA(Codex)     qa-prepare-tests.txt
-TESTS_WRITTEN PLAN_GATE    用户说 "plan approved"            IMPLEMENTATION  用户信号       —
-IMPLEMENTATION AUTO        FE+BE 编码完成                    QA_TESTING      FE+BE         fe/be-implementation.txt
-QA_TESTING    AUTO         测试通过                          QA_PASSED       QA(Codex)     qa-run-tests.txt
-QA_TESTING    AUTO         测试失败                          QA_FAILED       QA(Codex)     qa-run-tests.txt
-QA_PASSED     AUTO         —                                DONE            —              —
-QA_FAILED     AUTO         反思后重新实现 (count<3)          IMPLEMENTATION  General       general-add-reflection.txt
+PRD_APPROVED  AUTO         生成 Stitch 设计提示词               FIGMA_PROMPT        Designer      designer-figma-prompt.txt
+FIGMA_PROMPT  USER_GATE    用户说 "figma ready {url}"          DESIGN_SPEC        用户信号       —
+DESIGN_SPEC   AUTO         提取设计规格并更新 PRD               DESIGN_SPEC_REVIEW PM            pm-design-spec.txt
+DESIGN_SPEC_REVIEW USER_GATE 用户说 "approved"                DESIGN_READY       用户信号       —
+DESIGN_READY  AUTO         QA 生成测试计划                   TESTS_WRITTEN     QA(Codex)     qa-prepare-tests.txt
+TESTS_WRITTEN PLAN_GATE    用户说 "plan approved"            IMPLEMENTATION    用户信号       —
+IMPLEMENTATION AUTO        FE+BE 编码完成                    CODE_REVIEW       FE+BE         fe/be-implementation.txt
+CODE_REVIEW   AUTO         代码审查通过                      SECURITY_AUDIT    Gstack        staff-review-code.txt
+CODE_REVIEW   AUTO         代码审查不通过                    IMPLEMENTATION    Gstack        staff-review-code.txt
+SECURITY_AUDIT AUTO        安全审计通过                      QA_TESTING        Gstack        cso-audit.txt
+SECURITY_AUDIT AUTO        安全审计不通过                    IMPLEMENTATION    Gstack        cso-audit.txt
+QA_TESTING    AUTO         测试通过                          VISUAL_REVIEW     QA(Codex)     qa-run-tests.txt
+QA_TESTING    AUTO         测试失败                          QA_FAILED         QA(Codex)     qa-run-tests.txt
+VISUAL_REVIEW AUTO         视觉审查完成                      QA_PASSED         Gstack        design-review-visual.txt
+QA_PASSED     AUTO         发布完成                          PRODUCT_DOC       Gstack        ship-release.txt
+PRODUCT_DOC   AUTO         产品文档生成完成                   DONE              PM            pm-product-doc.txt
+QA_FAILED     AUTO         调查后重新实现 (count<3)          IMPLEMENTATION    Gstack        investigate-failure.txt
 QA_FAILED     USER_GATE    反思次数 ≥ 3                     —               用户干预       —
 ANY_STATE     —            用户 /update-prd                  PRD_DRAFT       PM(Claude)    pm-generate-prd.txt
 ```
@@ -82,24 +96,37 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
                → 状态 = PRD_DRAFT (USER_GATE)
 ```
 
-### 路径 3: 设计完成 → 实现计划 (AUTO → PLAN_GATE)
+### 路径 3: 设计完成 → 设计规格审阅 (AUTO → USER_GATE)
 ```
-用户: "design ready https://..." (状态=FIGMA_PROMPT)
+用户: "figma ready https://..." (状态=FIGMA_PROMPT)
   → 记录 design_url (存入 figma_url 字段)
+  → 1. PM: /extract-design-spec (AUTO)
+  → 状态 = DESIGN_SPEC_REVIEW (USER_GATE)
+  → ⏸ 等待用户操作：审阅设计规格和 PRD 增量更新
+```
+
+### 路径 4: 设计规格批准 → 实现计划 (AUTO → PLAN_GATE)
+```
+用户: "approved" (状态=DESIGN_SPEC_REVIEW)
   → 1. QA: /prepare-tests (AUTO)
   → 状态 = TESTS_WRITTEN (PLAN_GATE)
   → ⏸ 等待方案审批：审阅测试计划和实现计划
 ```
 
-### 路径 4: 计划批准 → 完成 (AUTO×3 → DONE | LOOP)
+### 路径 5: 计划批准 → 完成 (AUTO×6 → DONE | LOOP)
 ```
 用户: "plan approved" (状态=TESTS_WRITTEN)
   → 1. FE + BE: /figma-to-code build (AUTO, 并行)
     → 等待两者完成
-  → 2. QA: /run-tests (AUTO)
-    ├→ 全部通过 → 状态 = DONE ✅
-    └→ 有失败 → 3. General: /add-reflection (AUTO)
-                → 状态 = IMPLEMENTATION → 回到步骤 1 (循环修复)
+  → 2. Gstack: /review (AUTO)
+  → 3. Gstack: /cso (AUTO)
+  → 4. QA: /run-tests (AUTO)
+    ├→ 全部通过 → 5. Gstack: /design-review (AUTO)
+    │             → 6. Gstack: /ship (AUTO)
+    │             → 7. PM: /generate-product-doc (AUTO)
+    │             → 状态 = DONE
+    └→ 有失败 → Gstack: /investigate (AUTO)
+                → 状态 = IMPLEMENTATION → 回到步骤 1
                 → 最多 3 次
 ```
 
@@ -111,7 +138,8 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
 |---------|---------|---------|-----------|
 | 概念描述文本 | `IDEA` | `PRD_DRAFT` | 内联 PM |
 | `approved` / `通过` / `批准` | `PRD_DRAFT` | `PRD_REVIEW` | approve-prd chain |
-| `design ready {url}` / `stitch ready {url}` / `figma ready {url}` | `FIGMA_PROMPT` | `DESIGN_READY` | design-ready chain |
+| `figma ready {url}` / `stitch ready {url}` / `design ready {url}` | `FIGMA_PROMPT` | `DESIGN_SPEC` | design-ready chain |
+| `approved` / `通过` / `批准` | `DESIGN_SPEC_REVIEW` | `DESIGN_READY` | design-spec-approved chain |
 | `plan approved` / `计划通过` | `TESTS_WRITTEN` | `IMPLEMENTATION` | plan-approved chain |
 | `修改: {内容}` | 任意 | `PRD_DRAFT` | PM /update-prd |
 | `retry` / `重试` | 失败状态 | 重启失败节点 | — |
@@ -128,8 +156,8 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
 ```json
 {
   "success": true|false,
-  "agent": "PM|Designer|FE|BE|QA|General",
-  "action": "/generate-prd|/review-prd|...",
+  "agent": "PM|Designer|FE|BE|QA|General|Gstack",
+  "action": "/generate-prd|/review-prd|/extract-design-spec|/review|...",
   "summary": "简要描述完成了什么",
   "output_files": ["path/to/file1", "path/to/file2"],
   "issues": [],
@@ -142,8 +170,8 @@ ANY_STATE     —            用户 /update-prd                  PRD_DRAFT      
 ```json
 {
   "success": false,
-  "agent": "BE",
-  "action": "/review-prd",
+  "agent": "BE|Gstack|PM",
+  "action": "/review-prd|/review|/extract-design-spec",
   "error": "具体错误描述",
   "suggestion": "建议的修复方向"
 }

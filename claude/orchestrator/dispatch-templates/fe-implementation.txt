@@ -4,6 +4,23 @@
 
 根据 PRD、设计稿和实现计划，编码实现所有前端功能。
 
+## 工作方式
+
+### Phase 0: 工作区隔离（被动技能: Superpowers/Git-Worktrees）
+
+0. 创建功能分支（如果不在功能分支上）:
+   ```bash
+   BRANCH="feat/$(echo '{{FEATURE_NAME}}' | tr ' ' '-' | tr '[:upper:]' '[:lower:]')"
+   git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
+   ```
+1. 验证测试基线:
+   ```bash
+   yarn test 2>/dev/null || echo "no test suite"
+   ```
+   如果基线测试有失败 → 在输出中标记 `"baseline_failures": [...]`，但继续执行
+
+**不要在 main/master 上直接写代码。**
+
 ## 项目目录
 
 {{PROJECT_DIR}}
@@ -38,6 +55,40 @@ Design URL (Stitch): {{FIGMA_URL}}
 
 {{REFLECTION}}
 
+## 反思处理（被动技能: Superpowers/Receiving-Code-Review）
+
+当 `{{REFLECTION}}` 非空时（来自 Gstack 审查/QA 失败报告），按以下流程处理：
+
+1. **逐条阅读** — 不要跳过任何一条反馈
+2. **分类**: 🔴 CRITICAL → 必须修 | 🟡 WARNING → 修（除非有充分理由）| 🟢 INFO → 记录不修
+3. **修复顺序** — 🔴 先于 🟡，不要先做容易的
+4. **每个修复必须有验证** — 修完运行 `yarn build` 确认
+5. **不要过度修复** — 只修 reflection 提到的问题
+
+## 🎨 设计技能（必读）
+
+**在写第一行代码之前**，先读取核心设计 skill：
+```bash
+cat {{SKILLS_ROOT}}/frontend-design/SKILL.md
+```
+
+然后根据任务需要，按需读取以下技能（不需要全部读，选相关的）：
+
+| 技能 | 何时读取 | 路径 |
+|------|---------|------|
+| `frontend-design` | **必读** — 核心设计原则 + AI Slop 检测 | `{{SKILLS_ROOT}}/frontend-design/` |
+| `typeset` | 有文字排版时 | `{{SKILLS_ROOT}}/typeset/SKILL.md` |
+| `colorize` | 需要配色方案时 | `{{SKILLS_ROOT}}/colorize/SKILL.md` |
+| `arrange` | 布局/间距需优化时 | `{{SKILLS_ROOT}}/arrange/SKILL.md` |
+| `animate` | 需要动效/过渡时 | `{{SKILLS_ROOT}}/animate/SKILL.md` |
+| `adapt` | 响应式/多端适配时 | `{{SKILLS_ROOT}}/adapt/SKILL.md` |
+| `harden` | 错误状态/边界处理时 | `{{SKILLS_ROOT}}/harden/SKILL.md` |
+| `distill` | UI 过于复杂需精简时 | `{{SKILLS_ROOT}}/distill/SKILL.md` |
+| `polish` | 编码完成最终打磨时 | `{{SKILLS_ROOT}}/polish/SKILL.md` |
+| `audit` | 需要质量检查时 | `{{SKILLS_ROOT}}/audit/SKILL.md` |
+
+参考文件（按需查阅）：`{{SKILLS_ROOT}}/frontend-design/reference/` 下有 typography.md / color-and-contrast.md / spatial-design.md / motion-design.md / interaction-design.md / responsive-design.md / ux-writing.md
+
 ## 技术要求
 
 - Next.js 16 App Router + Turbopack
@@ -56,6 +107,31 @@ Design URL (Stitch): {{FIGMA_URL}}
 4. API 层统一用 Axios + interceptor
 5. 编码完成后运行 `yarn build` 验证
 
+## 🛑 Red Flags 自检（被动技能: Superpowers/Discipline）
+
+| 你在想什么 | 实际应该做什么 |
+|-----------|-------------|
+| "跳过 build 验证直接输出" | build 不可跳过 |
+| "这个边界不会出现" | 写 loading/empty/error 状态，让证据说话 |
+| "先核心功能再错误处理" | 错误处理是核心功能的一部分 |
+| "我知道代码是对的" | 跑 `yarn build`，让编译器证明 |
+| "顺便改个不相关的东西" | 不要。只做 PRD 范围内的事 |
+| "差不多就行了" | 完整实现或不做 |
+
+## ⚡ 完成前验证（被动技能: Superpowers/Verification-Before-Completion）
+
+在输出 `"success": true` 之前，必须逐条确认：
+
+- [ ] 所有页面覆盖了 loading / empty / error 三种状态
+- [ ] `yarn build` 编译成功（实际运行了，不是"应该通过"）
+- [ ] `yarn lint` 无新增 warning
+- [ ] 所有 API 调用都有错误处理
+- [ ] 没有跳过的 Phase
+- [ ] 没有硬编码的 API URL / 密钥
+- [ ] 响应式至少覆盖 375/768/1200
+
+**任何一条未满足 → `success` 必须为 `false`。**
+
 ## 输出
 
 ```json
@@ -66,6 +142,10 @@ Design URL (Stitch): {{FIGMA_URL}}
   "mode": "build",
   "summary": "前端实现完成: N 个组件, M 个页面",
   "output_files": ["src/components/...", "src/app/..."],
+  "verification": {
+    "build": "pass/fail",
+    "lint": "pass/fail"
+  },
   "issues": []
 }
 ```

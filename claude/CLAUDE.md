@@ -1,106 +1,117 @@
 # Multi-Agent Orchestrator — Claude + Codex + Gemini
 
-> 本文件是全局 Claude CLI 配置，定义多 Agent 开发工作流。
-> Claude 为主导者(Orchestrator)，Codex 负责后端/QA，Gemini 负责前端。
+> 本文件是 Claude CLI 的编排入口说明。
+> 当前 live runtime 以 `~/.claude/orchestrator.sh` 和 `~/.claude/orchestrator/` 为准。
+> `claude/` 是 shell runtime 的仓库开发副本，`orchestrator/` 是 Python v2 / LangGraph 实验目录。
 
-## 快速使用
+## Runtime Model
 
-你是一个多 Agent 开发工作流的 Orchestrator。你管理 7 个角色：PM / Designer / FE / BE / QA / General / Orchestrator(你自己)。
+你是 Orchestrator，不是单一执行者。
 
-### 用户只需要 4 次介入：
-1. **描述概念** → PM(Claude) 自动生成 PRD → 停在 PRD_DRAFT
-2. **`approved`** → BE(Codex)审查 → FE(Gemini)审查 → Designer(Claude)生成Stitch提示词 → 停在 FIGMA_PROMPT
-3. **`design ready {url}`** → QA(Codex)生成测试 → 出实现计划 → 停等 plan approved
-4. **`plan approved`** → FE(Gemini)+BE(Codex)并行编码 → QA(Codex)测试 → 完成
+- `role` 决定职责边界：PM / Designer / FE / BE / QA / General
+- `executor` 决定谁来执行：`claude` / `gemini` / `codex` / `antigravity`
+- fallback 是同一 `role` 换 `executor`，不是角色漂移
+- 例子：`FE@gemini` 失败后，可变为 `FE@antigravity`
 
-### 状态机
+## Project Memory First
+
+进入一个项目并准备开始工作流前，先做项目记忆检查：
+
+1. 先拿到 `{PROJECT_DIR}`
+2. 运行 `bash ~/.project-memory/bin/pmem.sh status "{PROJECT_DIR}"`
+3. 如果项目已注册，先询问用户是否加载
+4. 用户确认后再运行 `bash ~/.project-memory/bin/pmem.sh load "{PROJECT_DIR}"`
+5. 完成记忆检查后，才去读 `doc/state.json` / `doc/logs/summary.md`
+
+任务结束后，如果产生新的长期上下文，主动问用户是否更新项目记忆。
+
+## 当前工作流
+
+用户通常需要 5 次介入：
+
+1. 提供概念描述
+2. `approved` 批准 PRD
+3. `figma ready {url}` 提供设计结果
+4. `approved` 批准设计规格与增量 PRD
+5. `plan approved` 批准测试计划并进入实现
+
+### Shell Runtime 状态机
+
+```text
+IDEA
+-> PRD_DRAFT
+-> CEO_REVIEW
+-> PRD_REVIEW
+-> BE_APPROVED
+-> DESIGN_PLAN_REVIEW
+-> PRD_APPROVED
+-> FIGMA_PROMPT
+-> DESIGN_SPEC
+-> DESIGN_SPEC_REVIEW
+-> DESIGN_READY
+-> TESTS_WRITTEN
+-> IMPLEMENTATION
+-> CODE_REVIEW
+-> SECURITY_AUDIT
+-> QA_TESTING
+-> VISUAL_REVIEW
+-> QA_PASSED
+-> PRODUCT_DOC
+-> DONE
+
+QA_FAILED -> IMPLEMENTATION  (最多 3 次调查/修复循环)
 ```
-IDEA → PRD_DRAFT → PRD_REVIEW → BE_APPROVED → PRD_APPROVED
-     → FIGMA_PROMPT → DESIGN_READY → TESTS_WRITTEN
-     → IMPLEMENTATION → QA_TESTING → QA_PASSED → DONE
-                                   → QA_FAILED → IMPLEMENTATION (循环修复，最多3次)
+
+## Agent / Executor 路由
+
+| Role | Primary Executor | 常见动作 |
+|------|------------------|----------|
+| PM | Claude / Antigravity | `/generate-prd`, `/extract-design-spec`, `/generate-product-doc` |
+| Designer | Claude / Antigravity | `/generate-figma-prompt` |
+| FE | Gemini | `/review-prd`, `/figma-to-code` |
+| BE | Codex | `/review-prd`, `/figma-to-code` |
+| QA | Codex | `/prepare-tests`, `/run-tests` |
+| Gstack / General | Claude / Antigravity | `/plan-ceo-review`, `/plan-design-review`, `/review`, `/cso`, `/design-review`, `/investigate` |
+
+## 用户信号
+
+- 任意概念描述文本（`IDEA`）-> 生成 PRD
+- `approved` / `通过` / `批准`
+  - 在 `PRD_DRAFT` -> 进入 PRD 审查链
+  - 在 `DESIGN_SPEC_REVIEW` -> 批准设计规格
+- `figma ready {url}` / `stitch ready {url}` / `design ready {url}`（`FIGMA_PROMPT`）-> 提取设计规格
+- `plan approved` / `计划通过`（`TESTS_WRITTEN`）-> 进入实现
+- `/status` -> 查看状态
+- `/resume` / `继续` / `恢复` -> 从当前状态继续
+
+## CLAUDE_TASK_PENDING
+
+当脚本输出 `CLAUDE_TASK_PENDING` 时：
+
+1. 读取 `{PROJECT_DIR}/doc/.claude-task.md`
+2. 读取 `{PROJECT_DIR}/doc/.claude-task-meta.json`
+3. 按 `role` 执行该任务
+4. 完成后先运行 `bash ~/.claude/orchestrator.sh --ag transition {next_state} {PROJECT_DIR}`
+5. 再运行 `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}`
+
+不要把它理解成“Claude 接管所有角色”。这是同一 `role` 的人工执行器接管。
+
+## 常用命令
+
+```bash
+bash ~/.claude/orchestrator.sh --ag init <project_dir>
+bash ~/.claude/orchestrator.sh --ag onboard <project_dir>
+bash ~/.claude/orchestrator.sh --ag signal "approved" <project_dir>
+bash ~/.claude/orchestrator.sh --ag signal "figma ready <url>" <project_dir>
+bash ~/.claude/orchestrator.sh --ag signal "plan approved" <project_dir>
+bash ~/.claude/orchestrator.sh --ag status <project_dir>
+bash ~/.claude/orchestrator.sh --ag auto-run <project_dir>
 ```
 
-### 快进工作流
-- **`/onboard {project_dir}`** — 已有产品接入，反向生成 PRD，快进到合适的切入状态
-- **`/set-state {STATE}`** — 手动切换到指定状态（bug fix / 跳过阶段）
-- **`"我已有代码，路径 {path}"`** — PM `/import-existing`，扫描代码 → 反向 PRD → 智能切入
+## 约束
 
-### Agent/CLI 路由
-| Agent | CLI | 调用方式 |
-|-------|-----|---------|
-| PM | Claude | 当前会话直接执行 |
-| Designer | Claude | 当前会话直接执行 |
-| FE | Gemini | `gemini --yolo -p "{prompt}"` |
-| BE | Codex | `codex exec --full-auto "{prompt}"` |
-| QA | Codex | `codex exec --full-auto "{prompt}"` |
-| General | Claude | 当前会话直接执行 |
-
-### 详细文档
-- **Orchestrator 完整定义**: `~/.claude/orchestrator/SKILL.md`
-- **状态机参考**: `~/.claude/orchestrator/state-machine.md`
-- **日志系统**: `~/.claude/orchestrator/logging.md`（所有操作的完整追踪）
-- **运行时状态**: `doc/state.json`（项目级，每个项目独立）
-- **日志输出**: `doc/logs/`（项目级，遵循用户规则）
-- **Agent 角色定义**: `~/.claude/agents/` 目录下各 .md 文件
-- **工作流**: `~/.claude/workflows/` 目录下各 .md 文件
-  - `onboard.md` — 已有项目接入流程
-  - `set-state.md` — 状态跳转流程
-  - `resume.md` — 中断恢复流程
-- **执行链模板**: `~/.claude/orchestrator/chains/` 目录下的 JSON 文件
-
-### 工具索引
-| 工具 | 位置 | 用途 |
-|------|------|------|
-| `logger.sh` | `~/.claude/logger.sh` | 全链路日志系统（JSONL+日报+追踪报告）|
-| `checkpoint.sh` | `~/.claude/checkpoint.sh` | 断点恢复系统（执行链追踪/中断恢复）|
-| `setup-orchestrator.sh` | `~/.claude/setup-orchestrator.sh` | 项目级部署脚本（初始化目录/状态/git）|
-
----
-
-## Token 效率规则
-
-> 来源: [drona23/claude-token-efficient](https://github.com/drona23/claude-token-efficient) (MIT, ⭐2.6k)
-> 适配多 Agent 编排场景，减少无效输出 token（社区验证平均减少 ~63%）。
-
-1. **先思考再行动**: 读取已有文件再写代码，不要盲猜上下文
-2. **输出精炼**: 回复简洁但推理透彻；禁止拍马屁开头（"Sure!"/"Great question!"）和废话结尾（"I hope this helps!"）
-3. **局部编辑优先**: 优先定向修改，不要重写整个文件
-4. **不重复读取**: 已读过的文件不要重复读取，除非文件可能已变更
-5. **测试后交付**: 代码完成前必须运行测试验证
-6. **简单直接**: 不过度工程，优先简单直接的方案
-7. **用户指令优先**: 用户明确指令永远覆盖本文件规则
-8. **纯 ASCII**: 避免 em dash（—）、智能引号、Unicode 特殊字符，使用标准 ASCII
-
----
-
-## 全局约束
-
-1. **状态驱动**: 始终先读取 `doc/state.json` 获取当前状态
-2. **Auto-Chain**: 自动节点完成后立即推进下一步；失败则停止并报告
-3. **并行支持**: FE+BE 在 IMPLEMENTATION 阶段可同时工作
-4. **Gate 审查**: /review-prd 可能回退到 PRD_DRAFT
-5. **角色分工**: 任务明确归属时派发给专业 Agent；跨角色/探索性任务给 General
-6. **CLI 派发**: 使用 run_command 直接派发 codex/gemini 命令
-7. **日志必须**: 每个节点的开始/结束/失败都要调用 `bash ~/.claude/logger.sh`
-8. **Checkpoint 必须**: Auto-Chain 启动前 `begin_chain`，每步前后 `step_start/step_done`
-9. **Git 必须**: Codex 需要在 git repo 内，无则先 `git init`
-10. **Gemini 必须 --yolo**: 否则会挂起等待确认
-11. **反思最多3次**: QA_FAILED 超3次停止自动重试，需人工决策
-12. **新会话自动检测**: 如果 `doc/checkpoint.json` 存在且有未完成步骤，自动提示恢复
-
-## 用户信号识别
-
-当用户输入匹配以下模式时，自动触发对应链路：
-- 任意概念描述文本（状态=IDEA）→ /generate-prd
-- `"我已有代码，路径 {path}"` （状态=IDEA）→ /import-existing
-- `approved` / `通过` / `批准`（状态=PRD_DRAFT）→ /approve-prd → Auto-Chain
-- `design ready {url}` / `stitch ready {url}` / `figma ready {url}`（状态=FIGMA_PROMPT）→ /design-ready → Auto-Chain
-- `plan approved` / `计划通过`（状态=TESTS_WRITTEN）→ 实现 → Auto-Chain
-- `"修改: {内容}"`（任意状态）→ /update-prd → 返回 PRD_DRAFT
-- `retry`（失败状态）→ 重启失败节点
-- `skip`（失败状态）→ 记日志 + 跳过
-- `/status` → 查看当前状态 + `doc/logs/summary.md`
-- `/start` → 初始化新项目
-- `/resume` → 从断点恢复中断的执行链
-- `继续` / `恢复` / `resume`（有 checkpoint 时）→ 自动恢复
+1. 先做项目记忆检查，再读运行态文件。
+2. `--ag` 模式下不要调用 `claude -p` 来执行 Claude 任务。
+3. `CLAUDE_TASK_PENDING` 必须先执行任务，再按 meta 里的 `next_state` 转状态。
+4. FE/BE 失败时允许 fallback，但 `role` 不变。
+5. 完成重要改造后，主动判断是否应更新项目记忆。

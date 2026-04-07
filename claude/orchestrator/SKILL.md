@@ -2,6 +2,8 @@
 
 > Claude CLI 主导的多 Agent 开发工作流编排器。管理 PM/Designer/FE/BE/QA/General 六个专业 Agent 的协调调度，驱动从 IDEA 到 DONE 的完整产品开发链路。
 > 全局配置位于 `~/.claude/`，所有项目共享。运行时状态和日志位于项目级 `doc/` 目录。
+> 当前文件对应仓库中的 shell runtime 开发副本；真实 live 入口仍然是 `~/.claude/orchestrator.sh` 与 `~/.claude/orchestrator/`。
+> 本目录应与 shell runtime 对齐；`项目/orchestrator/` 是 Python v2 / LangGraph 实验目录，不应视为本目录的镜像。
 >
 > ### Orchestrator 子技能（决策引擎）
 > - [/determine-next-action](file:///Users/cy-zhen/.claude/orchestrator/skills/determine-next-action.md) — 状态判定：查表决定下一步操作和节点类型

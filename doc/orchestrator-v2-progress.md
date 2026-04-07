@@ -1,6 +1,6 @@
 # 编排器 v2 升级进展
 
-**最后更新**: 2025-03-25 全部完成 + 同步
+**最后更新**: 2026-04-07 文档更正
 
 ## 完成状态
 
@@ -19,10 +19,14 @@
 
 | 位置 | 说明 |
 |------|------|
-| `~/.claude/orchestrator/` | 运行时目录（orchestrator.sh 使用） |
-| `项目/orchestrator/` | 项目内镜像（git 跟踪用） |
+| `~/.claude/orchestrator/` | 当前 shell runtime 运行时目录（orchestrator.sh 使用） |
+| `项目/claude/orchestrator/` | 当前 shell runtime 的仓库开发副本 |
+| `项目/orchestrator/` | Python v2 / LangGraph 实验目录 |
 
-> 两者内容一致，使用 `rsync` 同步。运行时用 `~/.claude/` 路径。
+> 更正：
+> `项目/orchestrator/` 与 `~/.claude/orchestrator/` 现在并不一致，也不应再视为简单镜像关系。
+> 当前 live 行为以 `~/.claude/orchestrator.sh` 与 `~/.claude/orchestrator/` 为准。
+> 仓库内如果需要维护 shell runtime，请优先修改 `项目/claude/orchestrator/` 与 `项目/claude/orchestrator.sh`，再手动同步到 `~/.claude/...`。
 
 ## GEMINI.md 修复
 
@@ -48,7 +52,7 @@ bash ~/.claude/orchestrator.sh --ag auto-run <project_dir>
 bash ~/.claude/orchestrator.sh --ag status <project_dir>
 ```
 
-### LangGraph 版（新）
+### LangGraph 版（实验）
 
 ```bash
 python3 ~/.claude/orchestrator/graph.py run <project_dir>     # 运行
