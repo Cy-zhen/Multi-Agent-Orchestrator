@@ -82,6 +82,14 @@ cat ~/.claude/skills/frontend-design/SKILL.md
 
 所有视觉修复必须避免 AI Slop（详见 frontend-design SKILL.md 中的反面模式清单）。
 
+## Skill 使用记录（轻量审计）
+
+最终输出必须包含 `skills_used` 字段，列出本次实际读取并参考过的 skills / reference 文件。
+
+规则：
+- `frontend-design` 为必填
+- 只记录本次实际使用的项
+
 ## 站点 URL
 
 {{SITE_URL}}
@@ -103,6 +111,12 @@ cat ~/.claude/skills/frontend-design/SKILL.md
   "fixes_applied": 10,
   "risk_score": 0.15,
   "output_files": ["doc/visual-review.md"],
+  "skills_used": [
+    "frontend-design",
+    "typeset",
+    "arrange",
+    "frontend-design/reference/color-and-contrast.md"
+  ],
   "issues": []
 }
 ```

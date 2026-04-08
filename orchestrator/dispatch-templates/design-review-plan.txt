@@ -73,6 +73,14 @@ cat ~/.claude/skills/frontend-design/SKILL.md
 | Pass 6 响应式 | `~/.claude/skills/frontend-design/reference/responsive-design.md` |
 | Pass 7 未决决策 | `~/.claude/skills/critique/SKILL.md` |
 
+## Skill 使用记录（轻量审计）
+
+最终输出必须包含 `skills_used` 字段，列出本次实际读取并参考过的 skills / reference 文件。
+
+规则：
+- `frontend-design` 为必填
+- 只记录本次实际使用的项
+
 ## PRD 内容
 
 {{PRD_CONTENT}}
@@ -102,6 +110,11 @@ cat ~/.claude/skills/frontend-design/SKILL.md
   "fixes_applied": ["修复了空状态描述", "补充了移动端布局"],
   "decisions_needed": ["选项A vs 选项B: ..."],
   "output_files": ["doc/design-plan-review.md"],
+  "skills_used": [
+    "frontend-design",
+    "normalize",
+    "frontend-design/reference/responsive-design.md"
+  ],
   "issues": []
 }
 ```

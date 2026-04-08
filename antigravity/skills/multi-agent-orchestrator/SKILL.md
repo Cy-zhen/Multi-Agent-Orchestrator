@@ -82,6 +82,33 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 | "resume" / "恢复执行" / "继续" | `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}` |
 | 项目描述文本 (IDEA状态) | `bash ~/.claude/orchestrator.sh --ag signal "{用户原文}" {PROJECT_DIR}` |
 
+## 需求模式确认
+
+当用户正在讨论 PRD，或者当前没有 PRD 但已经在讨论前端方案时，如果任务发生在已有项目上且用户还没明确说明本次属于哪种工作模式，你要先主动问清楚，再继续推进：
+
+- `extend`: 新增功能
+- `modify`: 在现有功能上局部修改/补齐
+- `refactor`: 重构现有实现，但外部功能大体不变
+- `redesign`: 视觉/交互方案需要明显重做
+
+### 触发时机
+
+- 准备生成 PRD 前
+- 准备生成设计提示词前
+- 用户说“在现有项目上改一下/补一下/重构一下/重做页面”但没有明确 mode
+
+### 询问方式
+
+用一句短问句，不要一次展开成长篇说明：
+
+`这次是在现有项目上做 extend、modify、refactor 还是 redesign？`
+
+### 约束
+
+- 在用户没确认 mode 前，不要默认按 `refactor` 或 `redesign` 推进
+- 如果用户只说“改页面”或“改业务逻辑”，这不足以推断 mode，仍然要问
+- 一旦用户确认 mode，后续 PRD / 设计 / 实现都要与该 mode 保持一致
+
 ### 初始化新项目时
 
 如果用户只是说“初始化项目 {path}”：
@@ -99,12 +126,13 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 当命令输出包含 `CLAUDE_TASK_PENDING` 时，你需要：
 
 1. **读取** `{PROJECT_DIR}/doc/.claude-task.md` 中的 prompt
-2. **读取** `{PROJECT_DIR}/doc/.claude-task-meta.json` 了解 `role` / `action` / `executor` / `fallback_from` / `next_state`
+2. **读取** `{PROJECT_DIR}/doc/.claude-task-meta.json` 了解 `role` / `action` / `executor` / `fallback_from` / `next_state` / `next_node_type`
 3. **执行** prompt 中描述的任务
    - 你是在做该 `role` 的**人工接管执行器**
    - 不是把 FE/BE 角色改成 Claude 本身
 4. 完成任务后，**手动转换状态**: `bash ~/.claude/orchestrator.sh --ag transition {next_state} {PROJECT_DIR}`
-5. **继续链**: `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}`
+5. 如果 `next_node_type == AUTO`，**继续链**: `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}`
+6. 如果 `next_node_type` 是 `USER_GATE` / `PLAN_GATE` / `INTERACTIVE`，**不要继续链**，而是运行 `bash ~/.claude/orchestrator.sh --ag status {PROJECT_DIR}` 并停在 gate 等用户明确指令
 
 ## 绝对禁止
 
@@ -112,6 +140,7 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 - ❌ 跳过 `CLAUDE_TASK_PENDING` 直接改状态
 - ❌ 自己决定下一步状态（必须由脚本告诉你）
 - ❌ 把 `CLAUDE_TASK_PENDING` 理解成“Claude 角色接管一切”
+- ❌ 在 gate 状态后继续 auto-run，替用户提前推进流程
 
 ## Role / Executor 语义
 

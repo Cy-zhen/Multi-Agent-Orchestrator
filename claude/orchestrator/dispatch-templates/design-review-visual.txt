@@ -60,6 +60,14 @@
 - 风险超过 20% 时停止，询问用户
 - 最多修复 30 个问题
 
+## Skill 使用记录（轻量审计）
+
+最终输出必须包含 `skills_used` 字段，列出本次实际读取并参考过的 skills / reference 文件。
+
+规则：
+- `frontend-design` 为必填
+- 只记录本次实际使用的项
+
 {{SKILLS_INJECTION}}
 
 ## 站点 URL
@@ -83,6 +91,12 @@
   "fixes_applied": 10,
   "risk_score": 0.15,
   "output_files": ["doc/visual-review.md"],
+  "skills_used": [
+    "frontend-design",
+    "typeset",
+    "arrange",
+    "frontend-design/reference/color-and-contrast.md"
+  ],
   "issues": []
 }
 ```

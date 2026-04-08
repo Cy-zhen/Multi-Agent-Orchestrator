@@ -13,6 +13,23 @@
 - fallback 是同一 `role` 换 `executor`，不是角色漂移
 - 例子：`FE@gemini` 失败后，可变为 `FE@antigravity`
 
+## 直跑模式说明
+
+> 仅适用于你没有走 orchestrator 状态机，而是被用户直接要求在本仓库里完成某项工作。
+> 如果当前任务已经在 orchestrator 链上，仍以状态机和派发模板为准。
+
+- 直接做 Designer / 设计 prompt / 设计审查时：
+  - 必读 `~/.claude/skills/frontend-design/SKILL.md`
+  - 按场景补读 `typeset`, `colorize`, `arrange`, `adapt`, `animate`, `critique`, `distill`, `polish`
+  - 输出给用户的内容应是可直接使用的成品 prompt 或审查结果，不要把分析过程原样展开
+- 直接做 Gstack 式设计审查时：
+  - `frontend-design` 必读
+  - 设计方案审查优先补读 `normalize`, `extract`, `critique`
+  - 视觉审查优先补读 `typeset`, `colorize`, `arrange`, `adapt`, `animate`, `polish`
+- 直接做编排类工作时：
+  - 不要越权替 FE 写前端、替 BE 写后端
+  - 保持 role / executor 边界不变
+
 ## Project Memory First
 
 进入一个项目并准备开始工作流前，先做项目记忆检查：
@@ -92,7 +109,8 @@ QA_FAILED -> IMPLEMENTATION  (最多 3 次调查/修复循环)
 2. 读取 `{PROJECT_DIR}/doc/.claude-task-meta.json`
 3. 按 `role` 执行该任务
 4. 完成后先运行 `bash ~/.claude/orchestrator.sh --ag transition {next_state} {PROJECT_DIR}`
-5. 再运行 `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}`
+5. 如果 `next_node_type == AUTO`，再运行 `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}`
+6. 如果 `next_node_type` 是 `USER_GATE` / `PLAN_GATE` / `INTERACTIVE`，不要 auto-run，改为运行 `bash ~/.claude/orchestrator.sh --ag status {PROJECT_DIR}` 并等待用户信号
 
 不要把它理解成“Claude 接管所有角色”。这是同一 `role` 的人工执行器接管。
 
@@ -107,6 +125,21 @@ bash ~/.claude/orchestrator.sh --ag signal "plan approved" <project_dir>
 bash ~/.claude/orchestrator.sh --ag status <project_dir>
 bash ~/.claude/orchestrator.sh --ag auto-run <project_dir>
 ```
+
+## 需求模式确认
+
+在已有项目上推进需求时，进入 PRD 讨论前，或者没有 PRD 但已经要讨论前端方案时，如果用户还没明确本次模式，先主动确认：
+
+- `extend`
+- `modify`
+- `refactor`
+- `redesign`
+
+推荐问法：
+
+`这次是在现有项目上做 extend、modify、refactor 还是 redesign？`
+
+在用户确认前，不要默认按 `refactor` 或 `redesign` 推进。
 
 ## 约束
 

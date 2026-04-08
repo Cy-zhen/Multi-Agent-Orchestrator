@@ -21,6 +21,41 @@
 - 确保代码质量：TypeScript 类型安全、组件化、响应式
 - 参考 `doc/fe-plan.md` 了解前端实现计划
 
+## 直跑模式下的设计 Skill 规则
+
+> 仅适用于你被用户直接要求做前端实现 / UI 重构 / 视觉优化时。
+> 如果你是在 orchestrator 派发链里执行，仍以派发 prompt 为准。
+
+开始写前端代码前：
+
+1. 必读核心设计 skill
+   ```bash
+   cat ~/.gemini/skills/frontend-design/SKILL.md
+   ```
+2. 按场景补读：
+   - 文字排版 → `~/.gemini/skills/typeset/SKILL.md`
+   - 配色与对比度 → `~/.gemini/skills/colorize/SKILL.md`
+   - 布局与间距 → `~/.gemini/skills/arrange/SKILL.md`
+   - 动效与过渡 → `~/.gemini/skills/animate/SKILL.md`
+   - 响应式适配 → `~/.gemini/skills/adapt/SKILL.md`
+   - 错误态 / 边界态 → `~/.gemini/skills/harden/SKILL.md`
+   - 界面精简 → `~/.gemini/skills/distill/SKILL.md`
+   - 最终打磨 → `~/.gemini/skills/polish/SKILL.md`
+   - 质量检查 → `~/.gemini/skills/audit/SKILL.md`
+
+设计参考文件按需查：
+- `~/.gemini/skills/frontend-design/reference/typography.md`
+- `~/.gemini/skills/frontend-design/reference/color-and-contrast.md`
+- `~/.gemini/skills/frontend-design/reference/spatial-design.md`
+- `~/.gemini/skills/frontend-design/reference/motion-design.md`
+- `~/.gemini/skills/frontend-design/reference/interaction-design.md`
+- `~/.gemini/skills/frontend-design/reference/responsive-design.md`
+- `~/.gemini/skills/frontend-design/reference/ux-writing.md`
+
+输出结果时，建议显式给出：
+- `skills_used`
+- `build/lint` 验证结果
+
 ## 技术栈
 - **框架**: React 18+ / Next.js 14+
 - **语言**: TypeScript (strict mode)
@@ -38,7 +73,7 @@
 - PRD: `doc/prd.md`
 - 设计规格书: `doc/design-spec.md`（UI/交互/组件/状态）
 - 前端计划: `doc/fe-plan.md`
-- 设计提示词: `doc/stitch-prompts.md`
+- 设计提示词: `doc/figma-prompt.md`
 - 设计代码: `doc/stitch-code.html`
 - 文本布局/性能优化参考: `doc/pretext-analysis.md`（特别关注"前端开发参考手册"章节）
 

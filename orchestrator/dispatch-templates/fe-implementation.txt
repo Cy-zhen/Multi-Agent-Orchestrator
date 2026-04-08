@@ -89,6 +89,16 @@ cat ~/.gemini/skills/frontend-design/SKILL.md
 
 参考文件（按需查阅）：`~/.gemini/skills/frontend-design/reference/` 下有 typography.md / color-and-contrast.md / spatial-design.md / motion-design.md / interaction-design.md / responsive-design.md / ux-writing.md
 
+## Skill 使用记录（轻量审计）
+
+最终输出必须包含 `skills_used` 字段，列出本次实际读取并参考过的设计 skills / reference 文件。
+
+规则：
+- `frontend-design` 为必填
+- 只写本次真的读过并影响了实现决策的项
+- 如果读了 reference 文件，也要写出具体文件名
+- 不要把“理论上可以读”的都填进去
+
 ## 技术要求
 
 - Next.js 16 App Router + Turbopack
@@ -142,6 +152,12 @@ cat ~/.gemini/skills/frontend-design/SKILL.md
   "mode": "build",
   "summary": "前端实现完成: N 个组件, M 个页面",
   "output_files": ["src/components/...", "src/app/..."],
+  "skills_used": [
+    "frontend-design",
+    "adapt",
+    "arrange",
+    "frontend-design/reference/responsive-design.md"
+  ],
   "verification": {
     "build": "pass/fail",
     "lint": "pass/fail"

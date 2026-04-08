@@ -138,11 +138,11 @@ bash ~/.claude/logger.sh prd_generated "反向 PRD 从代码生成完成"
 
 ```
 用户: approved  (或自行编辑后 approved)
-→ 状态: PRD_APPROVED (跳过 review 阶段)
-→ Orchestrator: 派发 Designer Agent 生成 Figma 提示词
+→ 状态: PRD_REVIEW
+→ Orchestrator: 继续标准流程（BE review → FE review → Designer 生成 Figma 提示词）
 ```
 
-**注意**: onboard 模式下 **跳过 BE/FE 审查**，因为代码已是生产级。
+**注意**: 当前 live 状态机并不会在 onboard 模式下自动跳过 BE/FE 审查；这里必须与真实状态机保持一致。
 
 ---
 
@@ -220,8 +220,8 @@ Onboard 快进:
   ├─ /onboard {project_dir}
   │  ├─ General: 分析代码
   │  ├─ PM: 反向生成 PRD
-  │  └─ STATE: IDEA → PRD_DRAFT → (user approved) → PRD_APPROVED
-  └─ 从 PRD_APPROVED 继续标准流程 (Designer → FE+BE → QA)
+  │  └─ STATE: IDEA → PRD_DRAFT → (user approved) → PRD_REVIEW
+  └─ 从 PRD_REVIEW 继续标准流程 (BE → FE → Designer → QA/实现)
 ```
 
 ---

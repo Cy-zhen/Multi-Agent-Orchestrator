@@ -33,6 +33,7 @@ PROJECT_DIR=""
 STATE_FILE=""
 LOG_DIR=""
 FALLBACK_QUEUE_FILE=""
+PROGRESS_FILE=""
 
 # 设置项目路径
 set_project_dir() {
@@ -46,6 +47,7 @@ set_project_dir() {
   STATE_FILE="${PROJECT_DIR}/doc/state.json"
   LOG_DIR="${PROJECT_DIR}/doc/logs"
   FALLBACK_QUEUE_FILE="${PROJECT_DIR}/doc/.manual-takeover-queue.json"
+  PROGRESS_FILE="${PROJECT_DIR}/doc/progress.md"
 }
 
 # ---------- 颜色 ----------
@@ -110,12 +112,86 @@ check_project_dir() {
   [[ -f "$STATE_FILE" ]] || die "项目未初始化（缺少 ${STATE_FILE}）。请先运行: orchestrator.sh init <project_dir>"
 }
 
+ensure_progress_file() {
+  [[ -n "$PROJECT_DIR" ]] || return 0
+  [[ -n "$PROGRESS_FILE" ]] || PROGRESS_FILE="${PROJECT_DIR}/doc/progress.md"
+  if [[ ! -f "$PROGRESS_FILE" ]]; then
+    cat > "$PROGRESS_FILE" << 'EOF'
+# 工作进度账本
+
+> 作用:
+> - 记录各 Agent 的最新开发现场，覆盖“Memory 尚未保存”与“会话/Agent 中断”之间的空档
+> - 供 Codex / Gemini / Claude / Antigravity 在新会话接手前快速恢复上下文
+
+## Current Snapshot
+
+- 当前模式:
+- 当前目标:
+- 当前主状态:
+- 当前负责人:
+- 最新接手建议:
+- 当前 blockers:
+- 当前 open questions:
+- 最后更新时间:
+
+> 规则:
+> - 这个区块是覆盖式摘要，保持短小
+> - 新会话默认先读这里，不默认读取全部历史
+
+## Agent Updates
+
+### Entry Template
+
+```md
+#### 2026-04-07T00:00:00Z | FE | plan|build|fix
+- Completed:
+- Decisions:
+- Files:
+- Blockers:
+- Handoff:
+- Next:
+```
+EOF
+  fi
+}
+
 get_state() {
   jq -r '.state // "UNKNOWN"' "$STATE_FILE"
 }
 
 get_field() {
   jq -r ".$1 // \"\"" "$STATE_FILE"
+}
+
+get_work_mode() {
+  local mode
+  mode=$(get_field "work_mode")
+  if [[ -n "$mode" && "$mode" != "null" ]]; then
+    echo "$mode"
+    return 0
+  fi
+
+  if [[ -f "$PROGRESS_FILE" ]]; then
+    python3 - "$PROGRESS_FILE" <<'PYEOF'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    print("")
+    raise SystemExit
+
+for line in path.read_text(encoding="utf-8").splitlines():
+    if line.startswith("- 当前模式:"):
+        print(line.split(":", 1)[1].strip())
+        break
+else:
+    print("")
+PYEOF
+    return 0
+  fi
+
+  echo ""
 }
 
 read_doc_file() {
@@ -366,9 +442,18 @@ lookup_state() {
   esac
 }
 
+lookup_node_type() {
+  local state="$1"
+  local info
+  info=$(lookup_state "$state")
+  IFS='|' read -r node_type _ <<< "$info"
+  echo "$node_type"
+}
+
 # ---------- COMMAND: status ----------
 cmd_status() {
   check_project_dir
+  ensure_progress_file
   local state
   state=$(get_state)
   local info
@@ -379,6 +464,9 @@ cmd_status() {
   local reflection_count
   reflection_count=$(get_field "reflection_count")
   [[ -z "$reflection_count" ]] && reflection_count=0
+  local work_mode
+  work_mode=$(get_work_mode)
+  [[ -z "$work_mode" ]] && work_mode="未设置"
 
   echo ""
   echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
@@ -390,8 +478,9 @@ cmd_status() {
   echo -e "║ 主执行器:   ${cli}"
   echo -e "║ 动作:       ${skill}"
   echo -e "║ 模板:       ${template}"
+  echo -e "║ 工作模式:   ${work_mode}"
   echo -e "║ 调查次数:   ${reflection_count}/3"
-  echo -e "║ 项目目录:   $(pwd)"
+  echo -e "║ 项目目录:   ${PROJECT_DIR}"
   echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
   echo ""
 
@@ -424,6 +513,37 @@ cmd_status() {
       esac
       echo "  ${icon} ${ts} [${ag}] ${msg}"
     done
+  fi
+
+  if [[ -f "$PROGRESS_FILE" ]]; then
+    echo ""
+    echo -e "${BOLD}── 工作进度账本 ──${NC}"
+    python3 - "$PROGRESS_FILE" <<'PYEOF'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+snapshot = []
+in_snapshot = False
+for line in lines:
+    if line.startswith("## Current Snapshot"):
+        in_snapshot = True
+        continue
+    if in_snapshot and line.startswith("## "):
+        break
+    if in_snapshot:
+        snapshot.append(line)
+
+snapshot = [line for line in snapshot if line.strip()]
+if not snapshot:
+    print("  暂无 Current Snapshot，建议先更新 doc/progress.md")
+else:
+    print("  [Current Snapshot]")
+    for line in snapshot:
+        print(f"  {line}")
+PYEOF
+    echo "  完整账本: doc/progress.md"
   fi
 
   # ── Checkpoint（如有活跃链）──────────────────────
@@ -592,6 +712,8 @@ _emit_claude_task_pending() {
   local fallback_from="${7:-}"
   local nxt="${8:-}"
   [[ -z "$nxt" ]] && nxt=$(next_state "$state" true 2>/dev/null || echo "")
+  local next_node_type="UNKNOWN"
+  [[ -n "$nxt" ]] && next_node_type=$(lookup_node_type "$nxt")
 
   local task_file="${PROJECT_DIR}/doc/.claude-task.md"
   echo "$prompt" > "$task_file"
@@ -606,6 +728,7 @@ _emit_claude_task_pending() {
   "template": "${template}",
   "executor": "${executor}",
   "fallback_from": "${fallback_from}",
+  "next_node_type": "${next_node_type}",
   "next_state": "${nxt}",
   "next_state_on_success": "${nxt}"
 }
@@ -618,14 +741,19 @@ META
   echo -e "Role: ${role} | Action: ${action} | Executor: ${executor}"
   [[ -n "$fallback_from" ]] && echo -e "Fallback From: ${fallback_from}"
   echo -e "Prompt 已写入: ${task_file}"
-  echo -e "下一状态: ${nxt}"
+  echo -e "下一状态: ${nxt} (${next_node_type})"
   echo -e ""
   echo -e "请你以 ${role} 角色执行以下任务:"
   echo -e "1. 读取 ${task_file} 中的 prompt"
   echo -e "2. 读取 ${PROJECT_DIR}/doc/.claude-task-meta.json"
   echo -e "3. 按照 prompt 的要求执行任务"
   echo -e "4. 完成后先运行: orchestrator.sh --ag transition ${nxt} ${PROJECT_DIR}"
-  echo -e "5. 再运行: orchestrator.sh --ag auto-run ${PROJECT_DIR}"
+  if [[ "$next_node_type" == "AUTO" ]]; then
+    echo -e "5. 再运行: orchestrator.sh --ag auto-run ${PROJECT_DIR}"
+  else
+    echo -e "5. 不要继续 auto-run；改为运行: orchestrator.sh --ag status ${PROJECT_DIR}"
+    echo -e "6. 等待用户在 ${nxt} 阶段显式给出 gate 信号"
+  fi
   echo -e "${YELLOW}══════════════════════════════════════${NC}"
 }
 
@@ -762,6 +890,7 @@ cmd_init() {
 {
   "state": "IDEA",
   "project": "${project_name}",
+  "work_mode": null,
   "prd_path": "doc/prd.md",
   "figma_url": null,
   "tests_path": "doc/tests/",
@@ -775,6 +904,8 @@ EOF
   else
     echo -e "${YELLOW}state.json 已存在，跳过${NC}"
   fi
+
+  ensure_progress_file
 
   # 写首条日志
   if [[ -x "$LOGGER" ]]; then

@@ -2,6 +2,13 @@
 
 ## 工作方式（ReAct）
 
+### Phase 0: Resume Context（断点续接）
+0. 先读取 `doc/progress.md` 的 `Current Snapshot`
+0.1 看当前 blockers、最新接手建议、当前 open questions
+0.2 如果摘要不足，再补读最近 1-3 条 FE / BE / QA 更新
+0.3 如果发现已有未完成实现或待联调事项，优先在现有上下文上继续，而不是重复设计
+0.4 如果 `doc/progress.md` 缺失或内容过旧，在最终输出的 `issues` 中明确记录该风险
+
 ### Phase 1: Understand（理解）
 1. 读取 `doc/prd.md` 理解需求
 2. 读取 `doc/be-review.md` 了解技术审核意见
@@ -21,19 +28,23 @@
     - 次：Repository 层（数据库操作）
     - 再：Service 层（业务逻辑）
     - 最后：Handler 层（API 端点）+ 中间件
-11. 每完成一层运行 `go build ./...` 或 `npm run build` 验证
-12. API 的输入校验、错误处理必须在 Handler 层完成
+11. 如果项目已存在业务逻辑，优先在现有 service / handler / repository 上重构，不要只平行新增一套新逻辑
+12. 每完成一层运行 `go build ./...` 或 `npm run build` 验证
+13. API 的输入校验、错误处理必须在 Handler 层完成
 
 ### Phase 4: Verify（验证）
-13. 运行构建命令确认编译通过
-14. 运行 lint 检查
-15. 运行已有测试（`go test ./...` 或 `npm test`）
-16. 检查是否有硬编码配置（`grep -r "localhost" server/`）
-17. 检查是否有未处理的错误（`grep -r "_ =" server/` for Go）
+14. 运行构建命令确认编译通过
+15. 运行 lint 检查
+16. 运行已有测试（`go test ./...` 或 `npm test`）
+17. 检查是否有硬编码配置（`grep -r "localhost" server/`）
+18. 检查是否有未处理的错误（`grep -r "_ =" server/` for Go）
+19. 如果这是重构任务，确认旧逻辑已被替换/收敛，而不是仅新增平行分支
 
 ### Phase 5: Output（输出）
-18. 将 API 文档写入 `doc/api-spec.md`
-19. 输出标准 JSON
+20. 将 API 文档写入 `doc/api-spec.md`
+21. 覆盖更新 `doc/progress.md` 中的 `Current Snapshot`
+22. 追加一条 handoff 到 `doc/progress.md`
+23. 输出标准 JSON
 
 ## 约束
 - 只修改 `server/` 目录（或后端对应目录），不碰前端代码
@@ -80,4 +91,31 @@
   },
   "issues": []
 }
+```
+
+## `doc/progress.md` 回写格式
+
+先覆盖更新：
+
+```md
+## Current Snapshot
+- 当前目标: ...
+- 当前主状态: ...
+- 当前负责人: BE
+- 最新接手建议: ...
+- 当前 blockers: ...
+- 当前 open questions: ...
+- 最后更新时间: {UTC 时间}
+```
+
+再追加：
+
+```md
+#### {UTC 时间} | BE | build
+- Completed: 本次完成的 API / schema / service / migration / tests
+- Decisions: 关键接口和实现决策
+- Files: 修改过的核心文件
+- Blockers: 当前阻塞；没有则写 `无`
+- Handoff: 需要 FE / QA / 下一个 BE 会话继续处理的点
+- Next: 如果会话现在中断，下一个 Agent 最应该先做什么
 ```

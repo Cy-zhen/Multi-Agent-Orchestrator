@@ -25,6 +25,18 @@
 
 {{PROJECT_DIR}}
 
+## 断点续接要求
+
+开始编码前，先读取 `doc/progress.md` 的 `Current Snapshot`。重点看：
+
+1. 当前目标 / 当前主状态 / 当前负责人
+2. 当前 blockers / open questions / 最新接手建议
+3. 是否已经存在未完成的 Phase、部分完成的文件、待对接的 API
+
+只有当 `Current Snapshot` 不足以判断上下文时，才补读最近 1-3 条 `Agent Updates`。
+
+如果 `doc/progress.md` 不存在或没有有效内容，再继续按 PRD/计划推进，但要在最终输出里把这一点记为风险。
+
 ## PRD 内容
 
 {{PRD_CONTENT}}
@@ -89,6 +101,16 @@ cat {{SKILLS_ROOT}}/frontend-design/SKILL.md
 
 参考文件（按需查阅）：`{{SKILLS_ROOT}}/frontend-design/reference/` 下有 typography.md / color-and-contrast.md / spatial-design.md / motion-design.md / interaction-design.md / responsive-design.md / ux-writing.md
 
+## Skill 使用记录（轻量审计）
+
+最终输出必须包含 `skills_used` 字段，列出本次实际读取并参考过的设计 skills / reference 文件。
+
+规则：
+- `frontend-design` 为必填
+- 只写本次真的读过并影响了实现决策的项
+- 如果读了 reference 文件，也要写出具体文件名
+- 不要把“理论上可以读”的都填进去
+
 ## 技术要求
 
 - Next.js 16 App Router + Turbopack
@@ -105,7 +127,9 @@ cat {{SKILLS_ROOT}}/frontend-design/SKILL.md
 2. 页面级加载/空/错误状态必须覆盖
 3. 响应式至少 3 断点（375/768/1200）
 4. API 层统一用 Axios + interceptor
-5. 编码完成后运行 `yarn build` 验证
+5. 如果项目已存在页面/组件/路由，优先在现有实现上重构，不要只平行新增一套新页面
+6. 如果 PRD 提的是“重构”，必须明确说明你重构了哪些旧页面/逻辑，而不是只补了新代码
+7. 编码完成后运行 `yarn build` 验证
 
 ## 🛑 Red Flags 自检（被动技能: Superpowers/Discipline）
 
@@ -129,6 +153,7 @@ cat {{SKILLS_ROOT}}/frontend-design/SKILL.md
 - [ ] 没有跳过的 Phase
 - [ ] 没有硬编码的 API URL / 密钥
 - [ ] 响应式至少覆盖 375/768/1200
+- [ ] 如果这是重构任务，已有页面/组件已被实际替换或重构，而不是仅新增平行实现
 
 **任何一条未满足 → `success` 必须为 `false`。**
 
@@ -142,10 +167,48 @@ cat {{SKILLS_ROOT}}/frontend-design/SKILL.md
   "mode": "build",
   "summary": "前端实现完成: N 个组件, M 个页面",
   "output_files": ["src/components/...", "src/app/..."],
+  "skills_used": [
+    "frontend-design",
+    "adapt",
+    "arrange",
+    "frontend-design/reference/responsive-design.md"
+  ],
   "verification": {
     "build": "pass/fail",
     "lint": "pass/fail"
   },
   "issues": []
 }
+```
+
+## 完成后必须回写 `doc/progress.md`
+
+在输出 JSON 之前：
+
+1. 覆盖更新 `Current Snapshot`
+2. 再追加一条新的 handoff 记录到 `Agent Updates`
+
+`Current Snapshot` 应至少更新：
+
+```md
+## Current Snapshot
+- 当前目标: ...
+- 当前主状态: ...
+- 当前负责人: FE
+- 最新接手建议: ...
+- 当前 blockers: ...
+- 当前 open questions: ...
+- 最后更新时间: {UTC 时间}
+```
+
+`Agent Updates` 追加格式如下：
+
+```md
+#### {UTC 时间} | FE | build
+- Completed: 本次完成的页面/组件/API 对接
+- Decisions: 关键实现决策、约束、妥协
+- Files: 修改过的核心文件
+- Blockers: 当前阻塞；没有则写 `无`
+- Handoff: 需要 BE / QA / 下一个 FE 会话继续处理的点
+- Next: 如果会话现在中断，下一个 Agent 最应该先做什么
 ```

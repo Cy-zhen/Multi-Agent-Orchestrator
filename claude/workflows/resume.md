@@ -20,13 +20,16 @@ if [ ! -f "doc/checkpoint.json" ]; then
 fi
 ```
 
-2. **读取断点状态**
+2. **读取断点状态与最新交接**
 
 ```bash
 bash ~/.claude/checkpoint.sh read_status
+sed -n '/^## Current Snapshot/,/^## /p' doc/progress.md 2>/dev/null || true
 ```
 
 > 💡 也可直接查看人可读的执行计划: `cat doc/execution-plan.md`
+> 
+> 💡 如果 `Current Snapshot` 不足以恢复，再补读最近 1-3 条 `Agent Updates`，不要默认把全部历史读入上下文。
 
 3. **找到断点位置**
 

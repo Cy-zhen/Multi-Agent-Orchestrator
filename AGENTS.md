@@ -59,5 +59,46 @@
 - 项目记忆系统之前只有 `status/load/init` 这类基础能力
   - 现在已补成更适合 Agent 直接消费的版本，但还没做更强的结构化输出
 
-<!-- PROJECT_MEMORY_END -->
+## Direct-Run Guidance
 
+> 只适用于直接在各 CLI 内单跑，不适用于 orchestrator 已经派发好的链式任务。
+
+### Codex Direct Run
+
+- 默认职责仍然是 BE / QA，不要因为装了 design skills 就默认去接 FE 角色
+- 如果用户直接要求 Codex 处理 UI / 前端设计 / 视觉审查：
+  - 先读 `~/.codex/skills/frontend-design/SKILL.md`
+  - 再按场景补读：
+    - `typeset`
+    - `colorize`
+    - `arrange`
+    - `animate`
+    - `adapt`
+    - `harden`
+    - `distill`
+    - `polish`
+    - `audit`
+    - `normalize`
+    - `extract`
+    - `critique`
+- 如果只是 BE 在实现 API、数据模型、测试：
+  - `frontend-design` 仅在接口会明显影响 UI 状态设计时参考
+  - 不要让 design skills 反客为主，覆盖后端主职责
+
+### Claude Direct Run
+
+- 如果直接做设计 prompt / 设计审查：
+  - 先读 `~/.claude/skills/frontend-design/SKILL.md`
+  - 再按任务补读 `typeset`, `colorize`, `arrange`, `adapt`, `animate`, `critique`, `distill`, `polish`
+- 如果只是编排流程、状态推进、文档协调：
+  - 不需要为了“形式正确”去读整套设计 skills
+
+### Gemini Direct Run
+
+- 如果直接做 FE 实现或 UI 重构：
+  - 先读 `~/.gemini/skills/frontend-design/SKILL.md`
+  - 再按任务补读 `typeset`, `colorize`, `arrange`, `animate`, `adapt`, `harden`, `distill`, `polish`, `audit`
+- 如果只是在消费已有设计稿并做小修：
+  - 至少保持 `frontend-design` + 本次问题直接相关的 1-2 个 skill
+
+<!-- PROJECT_MEMORY_END -->

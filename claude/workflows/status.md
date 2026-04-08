@@ -4,7 +4,7 @@ description: View current multi-agent workflow status
 
 # /status — 查看工作流状态
 
-读取 `doc/state.json`、`doc/checkpoint.json` 和 `doc/logs/summary.md`，输出当前状态、执行进度和下一步建议。
+读取 `doc/state.json`、`doc/checkpoint.json`、`doc/logs/summary.md` 和 `doc/progress.md`，输出当前状态、执行进度和下一步建议。
 
 ## Steps
 
@@ -29,7 +29,15 @@ fi
 cat doc/logs/summary.md 2>/dev/null || echo "暂无追踪报告"
 ```
 
-4. **格式化输出**
+4. **读取工作进度账本摘要**
+
+```bash
+sed -n '/^## Current Snapshot/,/^## /p' doc/progress.md 2>/dev/null || echo "暂无工作进度账本"
+```
+
+> 默认只读 `Current Snapshot`。只有当摘要里提到 blocker / handoff / 冲突需要追溯时，才继续读取最近 1-3 条 `Agent Updates`。
+
+5. **格式化输出**
 
 解析 JSON 并输出以下格式：
 
@@ -37,6 +45,7 @@ cat doc/logs/summary.md 2>/dev/null || echo "暂无追踪报告"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 状态: {state}
 🏗  项目: {project}
+🧭 模式: {work_mode || "未设置"}
 📄 PRD: {prd_path || "未生成"}
 🎨 Figma: {figma_url || "未提供"}
 🧪 测试: {tests_path || "未生成"}
@@ -53,11 +62,12 @@ cat doc/logs/summary.md 2>/dev/null || echo "暂无追踪报告"
 
 ⏭  下一步: {建议操作}
 📋 执行计划: doc/execution-plan.md (如有活跃链)
+📝 最新交接: doc/progress.md
 📊 完整追踪: doc/logs/summary.md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-5. **下一步建议映射**
+6. **下一步建议映射**
 
 | 当前状态 | 建议 |
 |---------|------|
