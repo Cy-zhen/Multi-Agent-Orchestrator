@@ -39,20 +39,22 @@
 ## 工作方式（ReAct）
 
 ### Phase 1: Audit（审计）
-1. 使用浏览器工具访问站点
-2. 截取关键页面截图
-3. 运行 80 项视觉检查清单
+1. 先读取 `doc/acceptance-contract.json`，锁定本轮必须审查的页面、状态和截图清单
+2. 使用浏览器工具访问站点
+3. 截取关键页面截图
+4. 运行 80 项视觉检查清单
 
 ### Phase 2: Fix Loop（修复循环）
-4. 对每个发现：
+5. 对每个发现：
    a. 定位源文件
    b. 做最小 CSS/样式修改
    c. commit: `style(design): FINDING-NNN`
    d. 重新截图验证
 
 ### Phase 3: Output（输出）
-5. 将审查报告写入 `doc/visual-review.md`
-6. 输出标准 JSON 结果
+6. 将审查报告写入 `doc/visual-review.md`
+7. 更新 `doc/acceptance-screenshots/manifest.json` 中受影响截图的状态
+8. 输出标准 JSON 结果
 
 ## 约束
 - CSS-only 修改不计入风险预算

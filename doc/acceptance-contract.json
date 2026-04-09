@@ -1,0 +1,134 @@
+{
+  "feature_name": "workflow-continuity-and-acceptance-recovery",
+  "revision": 1,
+  "updated_at": "2026-04-09T00:00:00Z",
+  "owners": {
+    "pm": "Claude",
+    "fe": "Gemini",
+    "be": "Codex",
+    "qa": "Codex"
+  },
+  "scope": {
+    "in_scope_pages": [
+      {
+        "name": "Project status and workflow handoff",
+        "route": "doc/state.json + doc/logs/summary.md + doc/acceptance-contract.json",
+        "why_it_matters": "Every resumed session depends on the same acceptance facts."
+      },
+      {
+        "name": "Agent dispatch templates",
+        "route": "claude/orchestrator/dispatch-templates/* and ~/.claude/orchestrator/dispatch-templates/*",
+        "why_it_matters": "FE, QA, and visual review must all read the same recovery contract."
+      }
+    ],
+    "out_of_scope_notes": [
+      "Pixel-perfect screenshot comparison is not required for every page.",
+      "This contract governs workflow recovery and acceptance scope, not product feature behavior."
+    ]
+  },
+  "critical_user_flows": [
+    {
+      "id": "P0-001",
+      "name": "Codex interrupted, Antigravity resumes",
+      "priority": "P0",
+      "preconditions": [
+        "Project memory can be loaded",
+        "doc/acceptance-contract.json exists"
+      ],
+      "steps": [
+        "Codex modifies implementation or tests and stops unexpectedly",
+        "Antigravity re-enters the project via status or resume flow",
+        "Antigravity reads project memory, state, logs, and acceptance contract",
+        "Antigravity continues orchestration without redefining acceptance scope"
+      ],
+      "expected_result": "Recovery preserves the same acceptance boundary and does not drop critical validation items."
+    },
+    {
+      "id": "P0-002",
+      "name": "QA validates from contract after context loss",
+      "priority": "P0",
+      "preconditions": [
+        "doc/test-plan.md exists or can be regenerated",
+        "QA executor can access acceptance contract"
+      ],
+      "steps": [
+        "QA opens doc/acceptance-contract.json first",
+        "QA verifies critical flows, required UI states, and non-regression guards",
+        "QA updates doc/test-report.md and screenshot evidence manifest"
+      ],
+      "expected_result": "QA output remains aligned even when the previous implementation session is unavailable."
+    }
+  ],
+  "required_ui_states": [
+    {
+      "surface": "Workflow status handoff",
+      "states": ["status-read", "resume", "qa-testing", "visual-review"],
+      "notes": "Each state must preserve the same acceptance scope."
+    },
+    {
+      "surface": "Acceptance evidence",
+      "states": ["contract-present", "screenshots-pending", "screenshots-updated", "test-report-written"],
+      "notes": "Recovery must not skip evidence collection."
+    }
+  ],
+  "non_regression_guards": [
+    {
+      "area": "Cross-agent continuity",
+      "rule": "No agent may redefine validation scope without updating this contract."
+    },
+    {
+      "area": "QA recovery",
+      "rule": "QA must read the contract before running or summarizing tests."
+    },
+    {
+      "area": "Visual review",
+      "rule": "Visual review must use the contract screenshot list instead of ad hoc page selection."
+    }
+  ],
+  "evidence": {
+    "screenshots": [
+      {
+        "id": "shot-status-summary",
+        "path": "doc/acceptance-screenshots/status-summary-reference.png",
+        "viewport": "1440x1200",
+        "state": "status-read",
+        "must_match": [
+          "Current state is visible",
+          "Next-step guidance is visible",
+          "Acceptance scope is not ambiguous"
+        ]
+      },
+      {
+        "id": "shot-qa-report",
+        "path": "doc/acceptance-screenshots/qa-report-reference.png",
+        "viewport": "1440x1200",
+        "state": "qa-testing",
+        "must_match": [
+          "QA report references the contract revision",
+          "Critical flow results are visible"
+        ]
+      }
+    ],
+    "test_report": "doc/test-report.md",
+    "role_outputs": {
+      "fe_self_check": "doc/fe-self-check.md",
+      "be_self_check": "doc/be-self-check.md",
+      "qa_report": "doc/test-report.md",
+      "screenshot_manifest": "doc/acceptance-screenshots/manifest.json"
+    },
+    "notes": "These are acceptance evidence anchors for recovery scenarios, not mandatory full visual baselines."
+  },
+  "exit_criteria": [
+    "All P0 flows pass or have explicit failure reasons documented",
+    "FE self-check exists and references the current contract revision",
+    "BE self-check exists and references the current contract revision",
+    "QA reads this contract before running tests",
+    "Visual review uses the screenshot evidence list from this contract",
+    "doc/acceptance-screenshots/manifest.json is updated after acceptance work",
+    "Resumed sessions do not invent a new acceptance scope from memory alone"
+  ],
+  "handoff_notes": [
+    "If context is lost, read this file before resuming implementation, QA, or visual review.",
+    "When scope changes, update this file first and then regenerate test expectations."
+  ]
+}

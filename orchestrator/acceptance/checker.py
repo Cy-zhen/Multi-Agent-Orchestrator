@@ -23,6 +23,13 @@ import subprocess
 import sys
 import time
 
+try:
+    from .consistency import check_consistency
+    from .contract import validate_contract_file
+except ImportError:  # pragma: no cover - direct script execution fallback
+    from acceptance.consistency import check_consistency
+    from acceptance.contract import validate_contract_file
+
 
 # ────────── 验收结果 ──────────
 
@@ -109,6 +116,89 @@ def _file_exists(path: Path) -> CheckItem:
         name=f"文件存在: {path.name}",
         passed=exists,
         detail=f"{path.stat().st_size} bytes" if exists else "文件不存在或为空",
+    )
+
+
+def _json_contract_valid(path: Path) -> CheckItem:
+    """检查 acceptance contract 是否存在且结构合法"""
+    if not path.exists():
+        return CheckItem(
+            name="Acceptance Contract",
+            passed=False,
+            detail="缺少 doc/acceptance-contract.json",
+        )
+
+    try:
+        errors = validate_contract_file(path)
+    except Exception as exc:
+        return CheckItem(
+            name="Acceptance Contract",
+            passed=False,
+            detail=f"结构无效: {exc}",
+        )
+
+    if errors:
+        return CheckItem(
+            name="Acceptance Contract",
+            passed=False,
+            detail="; ".join(errors[:3]),
+        )
+
+    return CheckItem(
+        name="Acceptance Contract",
+        passed=True,
+        detail="结构有效，可作为断点恢复后的验收事实源",
+    )
+
+
+def _screenshot_evidence_exists(path: Path) -> CheckItem:
+    """检查验收截图目录是否存在"""
+    has_dir = path.exists() and any(path.iterdir())
+    return CheckItem(
+        name="验收截图证据",
+        passed=has_dir,
+        detail="存在截图证据目录" if has_dir else "建议产出 doc/acceptance-screenshots/ 作为交接证据",
+        severity="warning",
+    )
+
+
+def _acceptance_artifacts_consistent(project_dir: Path) -> CheckItem:
+    """检查 contract / manifest / test report revision 是否一致"""
+    errors = check_consistency(project_dir)
+    if errors:
+        return CheckItem(
+            name="验收工件一致性",
+            passed=False,
+            detail="; ".join(errors[:3]),
+            severity="warning",
+        )
+    return CheckItem(
+        name="验收工件一致性",
+        passed=True,
+        detail="contract、manifest、test-report revision 一致",
+        severity="warning",
+    )
+
+
+def _self_check_report(path: Path, role_name: str) -> CheckItem:
+    """检查 FE/BE 自测报告是否存在并带 contract revision"""
+    if not path.exists():
+        return CheckItem(
+            name=f"{role_name} 自测报告",
+            passed=False,
+            detail=f"缺少 {path.name}",
+            severity="warning",
+        )
+
+    content = path.read_text(encoding="utf-8")
+    has_revision = bool(re.search(r"Contract Revision:\s*\d+", content))
+    has_status = bool(re.search(r"Status:\s*(pass|fail|partial|not yet executed)", content, re.IGNORECASE))
+    passed = has_revision and has_status
+    return CheckItem(
+        name=f"{role_name} 自测报告",
+        passed=passed,
+        detail="包含 Contract Revision 和 Status" if passed else "报告需要包含 Contract Revision: N 和 Status: ...",
+        severity="warning",
     )
 
 
@@ -403,6 +493,7 @@ class AcceptanceChecker:
             _run_shell_check(lint_cmd, str(self.project_dir), f"Lint 通过 ({lint_cmd})"),
             _no_console_log(self.project_dir),
             _has_error_boundaries(self.project_dir),
+            _self_check_report(self.doc_dir / "fe-self-check.md", "FE"),
         ])
 
         return AcceptanceResult(agent="FE", checks=checks)
@@ -430,6 +521,7 @@ class AcceptanceChecker:
             _run_shell_check(lint_cmd, str(self.project_dir), f"Lint 通过"),
             _has_input_validation(self.project_dir),
             _has_error_handling(self.project_dir),
+            _self_check_report(self.doc_dir / "be-self-check.md", "BE"),
         ])
 
         return AcceptanceResult(agent="BE", checks=checks)
@@ -437,6 +529,14 @@ class AcceptanceChecker:
     def check_qa(self, test_result: Optional[dict] = None) -> AcceptanceResult:
         """验收测试结果"""
         checks = []
+        contract_path = self.doc_dir / "acceptance-contract.json"
+        screenshot_dir = self.doc_dir / "acceptance-screenshots"
+
+        checks.append(_json_contract_valid(contract_path))
+        checks.append(_screenshot_evidence_exists(screenshot_dir))
+        checks.append(_acceptance_artifacts_consistent(self.project_dir))
+        checks.append(_self_check_report(self.doc_dir / "fe-self-check.md", "FE"))
+        checks.append(_self_check_report(self.doc_dir / "be-self-check.md", "BE"))
 
         if test_result:
             # 从传入的 test_result dict 验收

@@ -10,46 +10,56 @@
 0.4 如果 `doc/progress.md` 缺失或内容过旧，在最终输出的 `issues` 中明确记录该风险
 
 ### Phase 1: Understand（理解）
-1. 读取 `doc/prd.md` 理解需求
-2. 读取 `doc/be-review.md` 了解技术审核意见
-3. 如有 `doc/reflection.md`，读取历史反思
-4. 检查现有代码结构（`ls server/` 或 `ls src/`）
-5. 读取 `go.mod` / `package.json` 了解依赖
+1. 如存在 `doc/acceptance-contract.json`，先读取并确认关键路径、接口影响面和不可回归项
+2. 读取 `doc/prd.md` 理解需求
+3. 读取 `doc/be-review.md` 了解技术审核意见
+4. 如有 `doc/reflection.md`，读取历史反思
+5. 检查现有代码结构（`ls server/` 或 `ls src/`）
+6. 读取 `go.mod` / `package.json` 了解依赖
 
 ### Phase 2: Plan（规划）
-6. 根据 PRD 设计 API 端点清单（Method + Path + 功能）
-7. 设计数据模型和数据库 Schema
-8. 确定架构分层（Handler → Service → Repository）
-9. 识别需要的中间件（认证、日志、限流）
+7. 根据 PRD 设计 API 端点清单（Method + Path + 功能）
+8. 设计数据模型和数据库 Schema
+9. 确定架构分层（Handler → Service → Repository）
+10. 识别需要的中间件（认证、日志、限流）
+11. 如果接口契约或关键路径发生变化，更新 `doc/acceptance-contract.json`
 
 ### Phase 3: Implement（实现）
-10. 按层级顺序实现：
+12. 按层级顺序实现：
     - 先：数据模型 + Migration
     - 次：Repository 层（数据库操作）
     - 再：Service 层（业务逻辑）
     - 最后：Handler 层（API 端点）+ 中间件
-11. 如果项目已存在业务逻辑，优先在现有 service / handler / repository 上重构，不要只平行新增一套新逻辑
-12. 每完成一层运行 `go build ./...` 或 `npm run build` 验证
-13. API 的输入校验、错误处理必须在 Handler 层完成
+13. 如果项目已存在业务逻辑，优先在现有 service / handler / repository 上重构，不要只平行新增一套新逻辑
+14. 每完成一层运行 `go build ./...` 或 `npm run build` 验证
+15. API 的输入校验、错误处理必须在 Handler 层完成
 
 ### Phase 4: Verify（验证）
-14. 运行构建命令确认编译通过
-15. 运行 lint 检查
-16. 运行已有测试（`go test ./...` 或 `npm test`）
-17. 检查是否有硬编码配置（`grep -r "localhost" server/`）
-18. 检查是否有未处理的错误（`grep -r "_ =" server/` for Go）
-19. 如果这是重构任务，确认旧逻辑已被替换/收敛，而不是仅新增平行分支
+16. 运行构建命令确认编译通过
+17. 运行 lint 检查
+18. 运行已有测试（`go test ./...` 或 `npm test`）
+19. 运行最小后端自测：
+    - 服务可启动或核心模块可加载
+    - 核心 happy path 接口可用
+    - 至少一个错误路径被验证（如 400/401/404/409）
+    - 输入校验存在
+    - 返回结构没有意外漂移
+20. 检查是否有硬编码配置（`grep -r "localhost" server/`）
+21. 检查是否有未处理的错误（`grep -r "_ =" server/` for Go）
+22. 如果这是重构任务，确认旧逻辑已被替换/收敛，而不是仅新增平行分支
+23. 将结果写入 `doc/be-self-check.md`，至少包含 `Contract Revision: N` 与 `Status: ...`
 
 ### Phase 5: Output（输出）
-20. 将 API 文档写入 `doc/api-spec.md`
-21. 覆盖更新 `doc/progress.md` 中的 `Current Snapshot`
-22. 追加一条 handoff 到 `doc/progress.md`
-23. 输出标准 JSON
+24. 将 API 文档写入 `doc/api-spec.md`
+25. 覆盖更新 `doc/progress.md` 中的 `Current Snapshot`
+26. 追加一条 handoff 到 `doc/progress.md`
+27. 输出标准 JSON
 
 ## 约束
 - 只修改 `server/` 目录（或后端对应目录），不碰前端代码
 - 所有外部输入必须校验
 - 敏感信息不出现在日志和 Git
+- 后端实现完成后必须交 `doc/be-self-check.md`
 
 ## 禁止行为
 - ❌ 不要在 Handler 里直接写 SQL
@@ -89,6 +99,7 @@
     "lint": "pass/fail",
     "test": "pass/fail/skipped"
   },
+  "self_check_report": "doc/be-self-check.md",
   "issues": []
 }
 ```

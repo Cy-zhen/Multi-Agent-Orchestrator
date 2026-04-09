@@ -1,0 +1,20 @@
+{
+  "revision": 1,
+  "updated_at": "2026-04-09T00:00:00Z",
+  "screenshots": [
+    {
+      "id": "shot-status-summary",
+      "path": "doc/acceptance-screenshots/status-summary-reference.png",
+      "status": "pending_capture",
+      "owned_by": "Claude/Antigravity",
+      "purpose": "Reference evidence for resumed status and handoff review."
+    },
+    {
+      "id": "shot-qa-report",
+      "path": "doc/acceptance-screenshots/qa-report-reference.png",
+      "status": "pending_capture",
+      "owned_by": "Codex QA",
+      "purpose": "Reference evidence that QA executed against the current contract revision."
+    }
+  ]
+}

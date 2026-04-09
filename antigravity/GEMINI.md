@@ -20,6 +20,7 @@
 - 按照项目技术栈编写组件、页面和路由
 - 确保代码质量：TypeScript 类型安全、组件化、响应式
 - 参考 `doc/fe-plan.md` 了解前端实现计划
+- 如果项目存在 `doc/acceptance-contract.json`，先读取它并按其约束实现
 
 ## 直跑模式下的设计 Skill 规则
 
@@ -55,6 +56,8 @@
 输出结果时，建议显式给出：
 - `skills_used`
 - `build/lint` 验证结果
+- `acceptance_contract_updated: true/false`
+- `self_check_report: doc/fe-self-check.md`
 
 ## 技术栈
 - **框架**: React 18+ / Next.js 14+
@@ -65,14 +68,30 @@
 
 ## 工作流程
 1. 收到 prompt → 阅读 PRD + 设计稿
-2. 实现前端代码（组件、页面、路由）
-3. 确保编译通过，无 TypeScript 错误
-4. 输出完成结果
+2. 如存在 `doc/acceptance-contract.json`，先读取并确认：
+   - 本次页面 / 路由范围
+   - P0 用户路径
+   - 必测 UI 状态
+   - 不可回归项
+   - 截图证据清单
+3. 实现前端代码（组件、页面、路由）
+4. 运行最小前端自测：
+   - 页面可加载
+   - 页面可滚动（如内容超出一屏）
+   - 关键 CTA 可点击
+   - 表单可输入 / 提交
+   - 375 / 768 / 1200 三个宽度检查
+5. 如 UI 范围发生变化，更新 `doc/acceptance-contract.json`
+6. 将结果写入 `doc/fe-self-check.md`
+7. 确保编译通过，无 TypeScript 错误
+8. 输出完成结果
 
 ## 参考文档
 - PRD: `doc/prd.md`
 - 设计规格书: `doc/design-spec.md`（UI/交互/组件/状态）
 - 前端计划: `doc/fe-plan.md`
+- 验收契约: `doc/acceptance-contract.json`
+- FE 自测报告: `doc/fe-self-check.md`
 - 设计提示词: `doc/figma-prompt.md`
 - 设计代码: `doc/stitch-code.html`
 - 文本布局/性能优化参考: `doc/pretext-analysis.md`（特别关注"前端开发参考手册"章节）

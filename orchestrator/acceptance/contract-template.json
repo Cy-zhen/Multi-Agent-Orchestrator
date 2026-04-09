@@ -1,0 +1,86 @@
+{
+  "feature_name": "short feature name",
+  "revision": 1,
+  "updated_at": "2026-04-09T00:00:00Z",
+  "owners": {
+    "pm": "Claude",
+    "fe": "Gemini",
+    "be": "Codex",
+    "qa": "Codex"
+  },
+  "scope": {
+    "in_scope_pages": [
+      {
+        "name": "Dashboard",
+        "route": "/dashboard",
+        "why_it_matters": "Primary entry page for this feature."
+      }
+    ],
+    "out_of_scope_notes": [
+      "Admin pages are unchanged in this revision."
+    ]
+  },
+  "critical_user_flows": [
+    {
+      "id": "P0-001",
+      "name": "User completes the main task",
+      "priority": "P0",
+      "preconditions": [
+        "Seed test data loaded",
+        "User is authenticated"
+      ],
+      "steps": [
+        "Open /dashboard",
+        "Trigger the primary CTA",
+        "Submit valid data"
+      ],
+      "expected_result": "Success state is visible and persisted."
+    }
+  ],
+  "required_ui_states": [
+    {
+      "surface": "Dashboard summary card",
+      "states": ["loading", "empty", "error", "success"],
+      "notes": "Each state must be deliberately reachable in test mode."
+    }
+  ],
+  "non_regression_guards": [
+    {
+      "area": "Responsive layout",
+      "rule": "No horizontal overflow at 375, 768, and 1200 widths."
+    }
+  ],
+  "evidence": {
+    "screenshots": [
+      {
+        "id": "shot-dashboard-success",
+        "path": "doc/acceptance-screenshots/dashboard-success.png",
+        "viewport": "1440x1200",
+        "state": "success",
+        "must_match": [
+          "Primary CTA visible above the fold",
+          "No layout overlap"
+        ]
+      }
+    ],
+    "test_report": "doc/test-report.md",
+    "role_outputs": {
+      "fe_self_check": "doc/fe-self-check.md",
+      "be_self_check": "doc/be-self-check.md",
+      "qa_report": "doc/test-report.md",
+      "screenshot_manifest": "doc/acceptance-screenshots/manifest.json"
+    },
+    "notes": "Store screenshots as evidence, not as full-site visual diff baselines."
+  },
+  "exit_criteria": [
+    "All P0 flows pass",
+    "FE self-check exists and references the current contract revision",
+    "BE self-check exists and references the current contract revision",
+    "All required_ui_states are exercised",
+    "Evidence screenshots exist and are current",
+    "doc/test-report.md references this revision"
+  ],
+  "handoff_notes": [
+    "When context is lost, read this file before running QA or visual review."
+  ]
+}

@@ -3,41 +3,53 @@
 ## 工作方式（ReAct）
 
 ### Phase 1: Understand（理解）
-1. 读取 `doc/test-plan.md` 了解测试计划
-2. 检查实际代码结构，了解前后端实现情况
-3. 读取 `package.json` / `go.mod` 确认测试框架
+1. 先读取 `doc/acceptance-contract.json`，把它当作本轮验收的事实源
+2. 读取 `doc/test-plan.md` 了解测试计划
+3. 读取 `doc/fe-self-check.md` 与 `doc/be-self-check.md`；如缺失，记录为风险并在报告中明确指出
+4. 检查实际代码结构，了解前后端实现情况
+5. 读取 `package.json` / `go.mod` 确认测试框架
 
 ### Phase 2: Prepare（准备）
-4. 检查测试环境是否就绪（依赖安装、数据库连接等）
-5. 根据实际代码结构调整测试脚本（如测试计划中的路径变更）
-6. 编写缺失的测试脚本
+5. 检查测试环境是否就绪（依赖安装、数据库连接等）
+6. 根据实际代码结构调整测试脚本（如测试计划中的路径变更）
+7. 编写缺失的测试脚本
+8. 为 acceptance contract 中列出的关键页面建立截图证据，保存到 `doc/acceptance-screenshots/`
 
 ### Phase 3: Execute（执行）
-7. 运行后端测试：`go test ./...` 或 `npm test`
-8. 运行前端测试：`yarn test` 或 `npx jest`
-9. 运行 lint 检查：`yarn lint` / `golangci-lint run`
-10. 运行构建验证：`yarn build` / `go build ./...`
-11. 收集覆盖率数据（如可获取）
+9. 运行后端测试：`go test ./...` 或 `npm test`
+10. 运行前端测试：`yarn test` 或 `npx jest`
+11. 运行 lint 检查：`yarn lint` / `golangci-lint run`
+12. 运行构建验证：`yarn build` / `go build ./...`
+13. 收集覆盖率数据（如可获取）
 
 ### Phase 4: Analyze（分析）
-12. 汇总测试结果：通过/失败/跳过
-13. 失败测试必须提供：
+14. 汇总测试结果：通过/失败/跳过
+15. 对照 acceptance contract，确认每个关键路径 / UI 状态 / 不可回归项是否有验证证据
+16. 对照 FE / BE 自测，确认：
+    - 自测覆盖了被修改层的最小职责
+    - 自测结论与 QA 实际结果没有明显冲突
+    - 若有冲突，必须在报告中写出
+17. 失败测试必须提供：
     - 测试名称
     - 错误信息和堆栈
     - 源文件和行号
     - 可能的修复方向
-14. 判定：
+18. 判定：
     - 全部通过 + 构建成功 + lint 通过 → `approved: true`
     - 任何测试失败 → `approved: false`
 
 ### Phase 5: Output（输出）
-15. 将测试报告写入 `doc/test-report.md`
-16. 输出标准 JSON
+19. 将测试报告写入 `doc/test-report.md`
+    - 报告顶部必须包含 `Contract Revision: N`
+20. 如截图证据有更新，写入 `doc/acceptance-screenshots/manifest.json`
+21. 输出标准 JSON
 
 ## 禁止行为
 - ❌ 不要在测试失败时只说"有失败"，必须给出具体错误和修复方向
 - ❌ 不要跳过 lint 和 build 检查
 - ❌ 不要伪造测试结果
+- ❌ 不要脱离 acceptance contract 自由发挥，除非明确记录偏差原因
+- ❌ 不要忽略 FE / BE 自测结果与 QA 结果的冲突
 
 {{SKILLS_INJECTION}}
 
@@ -77,7 +89,7 @@
     "build": "pass/fail",
     "lint": "pass/fail"
   },
-  "output_files": ["doc/test-report.md"],
+  "output_files": ["doc/test-report.md", "doc/acceptance-screenshots/manifest.json"],
   "issues": []
 }
 ```

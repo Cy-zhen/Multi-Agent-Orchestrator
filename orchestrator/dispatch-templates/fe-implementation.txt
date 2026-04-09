@@ -51,6 +51,33 @@ Design URL (Stitch): {{FIGMA_URL}}
 
 {{FE_PLAN}}
 
+## 验收契约（上下文恢复用）
+
+实现完成前，必须创建或更新 `doc/acceptance-contract.json`。
+
+最少要写清：
+- 本次改动涉及的页面 / 路由
+- P0 用户路径
+- 必须可见的 UI 状态（loading / empty / error / success）
+- 不可回归项
+- 需要保留的验收截图清单
+
+这个文件的目标不是“写文档”，而是让后续 Agent 在上下文断掉时还能知道该验什么。
+
+## FE 自测（必须产出）
+
+实现完成前，必须创建或更新 `doc/fe-self-check.md`。
+
+最少包含：
+- `Contract Revision: N`
+- `Status: pass/fail/partial`
+- 已检查路由 / 页面
+- 已验证交互
+- 是否可滚动（如页面内容超过一屏）
+- 375 / 768 / 1200 三个宽度的结果
+- build / lint / smoke 结果
+- console error 观察结果
+
 ## 反思文档（如有）
 
 {{REFLECTION}}
@@ -116,6 +143,16 @@ cat ~/.gemini/skills/frontend-design/SKILL.md
 3. 响应式至少 3 断点（375/768/1200）
 4. API 层统一用 Axios + interceptor
 5. 编码完成后运行 `yarn build` 验证
+6. 运行最小前端自测：
+   - 页面可加载
+   - 页面可滚动（如内容超出一屏）
+   - 关键 CTA 可点击
+   - 主要表单可输入 / 提交
+   - loading / empty / error / success 至少抽查
+   - 375 / 768 / 1200 三个宽度无明显断裂
+7. 如项目已有 Playwright / Vitest / smoke 脚本，优先运行最小集合
+8. 如有 UI 变更，准备 `doc/acceptance-screenshots/` 所需截图清单
+9. 将自测结果写入 `doc/fe-self-check.md`
 
 ## 🛑 Red Flags 自检（被动技能: Superpowers/Discipline）
 
@@ -135,6 +172,7 @@ cat ~/.gemini/skills/frontend-design/SKILL.md
 - [ ] 所有页面覆盖了 loading / empty / error 三种状态
 - [ ] `yarn build` 编译成功（实际运行了，不是"应该通过"）
 - [ ] `yarn lint` 无新增 warning
+- [ ] 最小前端 smoke 已执行并记录到 `doc/fe-self-check.md`
 - [ ] 所有 API 调用都有错误处理
 - [ ] 没有跳过的 Phase
 - [ ] 没有硬编码的 API URL / 密钥
@@ -162,6 +200,7 @@ cat ~/.gemini/skills/frontend-design/SKILL.md
     "build": "pass/fail",
     "lint": "pass/fail"
   },
+  "self_check_report": "doc/fe-self-check.md",
   "issues": []
 }
 ```

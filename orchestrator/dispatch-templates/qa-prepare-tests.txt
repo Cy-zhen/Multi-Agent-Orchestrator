@@ -3,38 +3,47 @@
 ## 工作方式（ReAct）
 
 ### Phase 1: Understand（理解）
-1. 读取 `doc/prd.md` 提取所有验收标准
-2. 读取 `doc/be-review.md` 和 `doc/fe-review.md` 了解技术细节
-3. 读取 `doc/figma-prompt.md` 了解 UI 交互（如存在）
-4. 检查项目结构，了解前后端分层
+1. 优先读取 `doc/acceptance-contract.json`；如果不存在，则先根据 PRD 生成一个最小可用契约
+2. 读取 `doc/prd.md` 提取所有验收标准
+3. 读取 `doc/be-review.md` 和 `doc/fe-review.md` 了解技术细节
+4. 读取 `doc/figma-prompt.md` 了解 UI 交互（如存在）
+5. 检查项目结构，了解前后端分层
 
 ### Phase 2: Analyze（分析）
-5. 将 PRD 验收标准逐条转化为测试用例
-6. 识别需要测试的边界条件和异常路径
-7. 确定测试层级分配（单元 / 集成 / E2E）
-8. 列出需要 mock 的外部依赖
+6. 将 acceptance contract 与 PRD 验收标准逐条转化为测试用例
+7. 识别需要测试的边界条件、异常路径、以及必须保留的不回归约束
+8. 确定测试层级分配（单元 / 集成 / E2E）
+9. 列出需要 mock 的外部依赖
 
 ### Phase 3: Design（设计）
-9. 编写测试计划文档，包含：
+10. 更新或生成 `doc/acceptance-contract.json`，至少包含：
+   - 关键页面 / 路由
+   - P0 用户路径
+   - 必测 UI 状态（loading/empty/error/success）
+   - 不可回归项
+   - 需要采集的验收截图清单
+11. 编写测试计划文档，包含：
    - 测试范围和目标
    - 测试用例列表（每个用例：描述/前置条件/步骤/预期结果）
    - 测试数据需求
    - 测试环境要求
-10. 按优先级排列：P0（核心流程）> P1（重要功能）> P2（边缘情况）
+12. 按优先级排列：P0（核心流程）> P1（重要功能）> P2（边缘情况）
 
 ### Phase 4: Validate（验证）
-11. 检查每个 PRD 验收标准是否有对应测试用例
-12. 检查是否覆盖了错误路径（不只是 happy path）
-13. 检查测试用例之间是否有依赖（应该独立）
+13. 检查每个 PRD 验收标准是否有对应测试用例
+14. 检查 acceptance contract 中的每个关键路径和 UI 状态是否都被覆盖
+15. 检查是否覆盖了错误路径（不只是 happy path）
+16. 检查测试用例之间是否有依赖（应该独立）
 
 ### Phase 5: Output（输出）
-14. 将测试计划写入 `doc/test-plan.md`
-15. 输出标准 JSON
+17. 将测试计划写入 `doc/test-plan.md`
+18. 输出标准 JSON
 
 ## 禁止行为
 - ❌ 不要只写 happy path 测试
 - ❌ 不要写依赖其他测试结果的测试用例
 - ❌ 不要遗漏 PRD 中任何一条验收标准
+- ❌ 不要让 acceptance contract 变成空壳；必须足够让后续 Agent 在断上下文时直接执行
 
 {{SKILLS_INJECTION}}
 
@@ -60,7 +69,7 @@
     "p2": 3,
     "total": 16
   },
-  "output_files": ["doc/test-plan.md"],
+  "output_files": ["doc/acceptance-contract.json", "doc/test-plan.md"],
   "issues": []
 }
 ```

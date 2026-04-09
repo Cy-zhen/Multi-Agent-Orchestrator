@@ -24,6 +24,21 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 
 不要在不知道 `{PROJECT_DIR}` 和当前状态的情况下直接盲发信号。
 
+## 轻量验收契约
+
+如果项目内存在 `doc/acceptance-contract.json`：
+
+1. 把它视为断上下文后的验收事实源
+2. 在转述状态、安排 QA、安排视觉审查前优先读取它
+3. 重点确认：
+   - 关键页面 / 路由
+   - P0 用户路径
+   - 必测 UI 状态
+   - 不可回归项
+   - 截图证据清单
+
+不要只依赖当前会话记忆去判断“这轮到底该验什么”。
+
 ## Project Memory Bootstrap
 
 每次进入一个项目目录并准备开始编排前，先执行项目记忆检查。这个步骤优先于读取 `doc/state.json`、日志、checkpoint。
@@ -130,6 +145,7 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 3. **执行** prompt 中描述的任务
    - 你是在做该 `role` 的**人工接管执行器**
    - 不是把 FE/BE 角色改成 Claude 本身
+   - 如果项目存在 `doc/acceptance-contract.json`，执行前先读它
 4. 完成任务后，**手动转换状态**: `bash ~/.claude/orchestrator.sh --ag transition {next_state} {PROJECT_DIR}`
 5. 如果 `next_node_type == AUTO`，**继续链**: `bash ~/.claude/orchestrator.sh --ag auto-run {PROJECT_DIR}`
 6. 如果 `next_node_type` 是 `USER_GATE` / `PLAN_GATE` / `INTERACTIVE`，**不要继续链**，而是运行 `bash ~/.claude/orchestrator.sh --ag status {PROJECT_DIR}` 并停在 gate 等用户明确指令
@@ -211,6 +227,7 @@ QA_FAILED -> IMPLEMENTATION  (最多 3 次调查/修复循环)
 > 多 Agent 流水线是高输出量场景，token 优化效果显著。
 
 - 先读项目记忆状态，再读 state.json + 日志，不盲猜上下文
+- 如果有 `doc/acceptance-contract.json`，在安排测试或审查前先读它
 - 回复精炼，禁止寒暄/拍马屁/废话结尾
 - 局部编辑优先，不重写整个文件
 - 已读文件不重复读取

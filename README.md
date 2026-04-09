@@ -62,7 +62,9 @@ ls ~/.claude/orchestrator.sh    # Claude CLI 侧
 │   ├── agents/                   ← [v2] Agent 基类
 │   │   └── base.py              ← BaseAgent + CLI 执行器
 │   ├── acceptance/               ← [v2] 验收系统
-│   │   └── checker.py           ← AcceptanceChecker（PM/FE/BE/QA/Designer）
+│   │   ├── checker.py           ← AcceptanceChecker（PM/FE/BE/QA/Designer）
+│   │   ├── contract.py          ← 🆕 机器可读验收契约校验器
+│   │   └── contract-template.json ← 🆕 断上下文可恢复的验收模板
 │   ├── skills/                   ← 技能系统
 │   │   ├── loader.py            ← [v2] SkillLoader（模板注入 + 渐进式披露）
 │   │   ├── determine-next-action.md
@@ -249,9 +251,16 @@ export LANGSMITH_TRACING=true
 ├── prd.md                    ← PM 生成的 PRD（随流程增量更新）
 ├── design-spec.md            ← 🆕 PM 提取的设计规格书（UI/交互/组件/状态）
 ├── product-doc.md            ← 🆕 PM 生成的产品文档（含5类流程图）
+├── acceptance-contract.json  ← 🆕 机器可读验收契约（上下文恢复的事实源）
 ├── figma-prompts.md          ← Designer 生成的 Figma 提示词
 ├── fe-plan.md                ← FE 审查 PRD 后的实现计划
+├── fe-self-check.md          ← 🆕 FE 最小自测结果
 ├── test-plan.md              ← QA 生成的测试计划
+├── be-self-check.md          ← 🆕 BE 最小自测结果
+├── test-report.md            ← 🆕 QA 正式验收报告
+├── acceptance-screenshots/   ← 🆕 关键页面/状态截图证据
+│   ├── *.png
+│   └── manifest.json
 ├── reflection.md             ← General 反思分析（QA 失败时）
 ├── .claude-task.md           ← [临时] Antigravity 模式的 prompt
 ├── .claude-task-meta.json    ← [临时] 任务元数据 (agent/skill/next_state)
@@ -271,10 +280,15 @@ export LANGSMITH_TRACING=true
 | `prd.md` | PM (Claude) | 生成 → DESIGN_SPEC 增量更新 → PRODUCT_DOC 冻结 |
 | `design-spec.md` | PM (Claude) | 🆕 Stitch 完成后提取设计规格 |
 | `product-doc.md` | PM (Claude) | 🆕 开发完成后生成产品文档（含流程图） |
+| `acceptance-contract.json` | FE/QA | 🆕 设计冻结后生成，开发/验收阶段持续更新 |
 | `code-scan.md` | Codex (BE) | onboard 扫描代码 |
 | `figma-prompts.md` | Designer (Claude) | PRD 批准后生成 |
 | `fe-plan.md` | FE (Gemini) | FE 审查 PRD 后 |
+| `fe-self-check.md` | FE (Gemini / direct run) | 🆕 FE 实现完成前更新最小自测 |
 | `test-plan.md` | QA (Codex) | Figma 完成后生成 |
+| `be-self-check.md` | BE (Codex / direct run) | 🆕 BE 实现完成前更新最小自测 |
+| `test-report.md` | QA (Codex) | 🆕 QA 执行后输出正式验收结果 |
+| `acceptance-screenshots/manifest.json` | QA / 视觉审查 | 🆕 每次验收更新截图证据 |
 | `logs/workflow.jsonl` | logger.sh | 每个 Agent 操作时追加 |
 | `logs/summary.md` | logger.sh | 状态变化时重新渲染 |
 | `checkpoint.json` | checkpoint.sh | 执行链运行时，完成后清理 |
@@ -292,6 +306,31 @@ export LANGSMITH_TRACING=true
 2. 读 `doc/logs/summary.md` → 了解执行历史
 3. 如有 `doc/checkpoint.json` → 从断点继续
 4. 否则 → 从当前状态的下一步开始
+
+### 10. 轻量验收契约
+
+为了解决“上下文断掉后测试遗漏、后续 Agent 跑偏”的问题，v2 增加了轻量验收契约：
+
+- `doc/acceptance-contract.json` 是验收事实源，不是长篇说明文
+- 它必须明确：
+  - 这次改了哪些页面 / 路由
+  - 哪些是 P0 用户路径
+  - 哪些 UI 状态必须被验证
+  - 哪些地方不能回归
+  - 需要保留哪些截图证据
+  - FE / BE / QA 各层必须交什么证据
+- `doc/acceptance-screenshots/` 保存关键截图，作为交接和复验证据
+- `doc/fe-self-check.md` 与 `doc/be-self-check.md` 是开发层自证，不等同于 QA
+- `doc/test-report.md` 是 QA 正式验收结果，必须写明 `Contract Revision: N`
+
+校验方式：
+
+```bash
+python3 orchestrator/acceptance/contract.py doc/acceptance-contract.json
+python3 orchestrator/acceptance/consistency.py .
+```
+
+这个方案刻意不做全站像素级视觉回归；优先保证任何 Agent 在失去会话上下文后，仍能根据同一份契约完成复验。
 
 ```bash
 # 恢复执行

@@ -18,6 +18,14 @@
 > 仅适用于你没有走 orchestrator 状态机，而是被用户直接要求在本仓库里完成某项工作。
 > 如果当前任务已经在 orchestrator 链上，仍以状态机和派发模板为准。
 
+- 如果项目里存在 `doc/acceptance-contract.json`：
+  - 先读它，再决定本轮要审什么、验什么、交接什么
+  - 把它视为断上下文后的验收事实源
+  - 如果你的工作改变了关键页面、P0 路径、UI 状态或截图清单，负责更新它
+- 如果你在单兵模式下直接做实现或验收：
+  - 前端层要交 `doc/fe-self-check.md`
+  - 后端层要交 `doc/be-self-check.md`
+  - 结束前跑 `python3 orchestrator/acceptance/consistency.py .`
 - 直接做 Designer / 设计 prompt / 设计审查时：
   - 必读 `~/.claude/skills/frontend-design/SKILL.md`
   - 按场景补读 `typeset`, `colorize`, `arrange`, `adapt`, `animate`, `critique`, `distill`, `polish`
@@ -148,3 +156,4 @@ bash ~/.claude/orchestrator.sh --ag auto-run <project_dir>
 3. `CLAUDE_TASK_PENDING` 必须先执行任务，再按 meta 里的 `next_state` 转状态。
 4. FE/BE 失败时允许 fallback，但 `role` 不变。
 5. 完成重要改造后，主动判断是否应更新项目记忆。
+6. 如果项目使用轻量验收契约，设计审查和视觉审查必须先读 `doc/acceptance-contract.json`。

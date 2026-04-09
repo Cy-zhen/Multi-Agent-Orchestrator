@@ -25,6 +25,7 @@ class OrchestratorState(TypedDict, total=False):
         prd_content:       PRD 文档内容（PM 产出）
         figma_prompt:      Figma prompt（Designer 产出）
         figma_url:         Figma 设计稿 URL（用户提供）
+        acceptance_contract: 机器可读验收契约
         fe_plan:           前端实现计划
         be_plan:           后端实现计划
         test_plan:         测试计划（QA 产出）
@@ -42,6 +43,7 @@ class OrchestratorState(TypedDict, total=False):
     prd_content: str
     figma_prompt: str
     figma_url: str
+    acceptance_contract: dict
     fe_plan: str
     be_plan: str
     test_plan: str

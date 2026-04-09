@@ -66,6 +66,19 @@
 ### Codex Direct Run
 
 - 默认职责仍然是 BE / QA，不要因为装了 design skills 就默认去接 FE 角色
+- 如果当前项目存在 `doc/acceptance-contract.json`：
+  - 在开始实现、测试、review 之前先读它
+  - 把它当作断上下文后的验收事实源，不要只靠会话记忆
+  - 如果你做的是 QA / 验收，优先核对：
+    - 关键页面 / 路由
+    - P0 用户路径
+    - 必测 UI 状态
+    - 不可回归项
+    - 截图证据清单
+- 如果你单兵模式直接做所有内容：
+  - 仍然要分别产出 `doc/fe-self-check.md` 和 `doc/be-self-check.md`（按实际触及层）
+  - 如果有 UI 改动，至少做一轮最小前端 smoke
+  - 最后跑 `python3 orchestrator/acceptance/consistency.py .`
 - 如果用户直接要求 Codex 处理 UI / 前端设计 / 视觉审查：
   - 先读 `~/.codex/skills/frontend-design/SKILL.md`
   - 再按场景补读：
@@ -84,9 +97,15 @@
 - 如果只是 BE 在实现 API、数据模型、测试：
   - `frontend-design` 仅在接口会明显影响 UI 状态设计时参考
   - 不要让 design skills 反客为主，覆盖后端主职责
+  - 如果改动会影响前端状态或验收路径，更新 `doc/acceptance-contract.json`
+  - 后端完成后必须更新 `doc/be-self-check.md`
 
 ### Claude Direct Run
 
+- 如果当前项目存在 `doc/acceptance-contract.json`：
+  - 先读取它，再决定设计审查范围、视觉检查清单、或 handoff 内容
+  - 不要脱离契约自由扩展审查范围，除非明确记录偏差原因
+  - 如果你在单兵模式下直接做实现，也要要求对应层提交自测报告
 - 如果直接做设计 prompt / 设计审查：
   - 先读 `~/.claude/skills/frontend-design/SKILL.md`
   - 再按任务补读 `typeset`, `colorize`, `arrange`, `adapt`, `animate`, `critique`, `distill`, `polish`
@@ -95,6 +114,11 @@
 
 ### Gemini Direct Run
 
+- 如果当前项目存在 `doc/acceptance-contract.json`：
+  - 在开始 FE 实现前先读它
+  - 把它当作本轮 UI 范围、关键路径、状态覆盖和截图证据的约束
+  - FE 完成后如有 UI 变更，负责更新它
+  - FE 完成后还要写 `doc/fe-self-check.md`
 - 如果直接做 FE 实现或 UI 重构：
   - 先读 `~/.gemini/skills/frontend-design/SKILL.md`
   - 再按任务补读 `typeset`, `colorize`, `arrange`, `animate`, `adapt`, `harden`, `distill`, `polish`, `audit`
