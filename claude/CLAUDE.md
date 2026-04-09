@@ -18,6 +18,10 @@
 > 仅适用于你没有走 orchestrator 状态机，而是被用户直接要求在本仓库里完成某项工作。
 > 如果当前任务已经在 orchestrator 链上，仍以状态机和派发模板为准。
 
+- 在删除、清理、回滚任何文件前：
+  - 先检查该文件是否被 Git 跟踪：`git ls-files --error-unmatch <path>` 或 `git status --short <path>`
+  - 不要仅凭目录名或扩展名推断“这一定是缓存”
+  - 对 `__pycache__`、`*.pyc`、截图目录、日志目录都一视同仁，先查再删
 - 如果项目里存在 `doc/acceptance-contract.json`：
   - 先读它，再决定本轮要审什么、验什么、交接什么
   - 把它视为断上下文后的验收事实源

@@ -27,6 +27,19 @@
 > 仅适用于你被用户直接要求做前端实现 / UI 重构 / 视觉优化时。
 > 如果你是在 orchestrator 派发链里执行，仍以派发 prompt 为准。
 
+在删除、清理、回滚任何文件前：
+
+1. 先检查该文件是否被 Git 跟踪
+   ```bash
+   git ls-files --error-unmatch <path>
+   ```
+   或
+   ```bash
+   git status --short <path>
+   ```
+2. 不要仅凭目录名或扩展名判断“这是缓存可以删”
+3. 对 `__pycache__`、`*.pyc`、截图目录、导出目录同样先查再删
+
 开始写前端代码前：
 
 1. 必读核心设计 skill

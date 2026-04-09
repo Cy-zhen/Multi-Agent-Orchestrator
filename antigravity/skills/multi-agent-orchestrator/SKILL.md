@@ -39,6 +39,22 @@ description: 多Agent开发工作流编排器。管理PM/Designer/FE/BE/QA/Gener
 
 不要只依赖当前会话记忆去判断“这轮到底该验什么”。
 
+## 文件删除安全规则
+
+当你让 Claude / Gemini / Codex / Antigravity 任何一方清理文件、缓存、截图、日志、导出物时：
+
+1. 先检查目标文件是否被 Git 跟踪
+   - `git ls-files --error-unmatch <path>`
+   - 或 `git status --short <path>`
+2. 只有确认是未跟踪、且明确由本次流程生成的临时产物，才允许删除
+3. 不要仅凭名字推断可删
+   - `__pycache__`
+   - `*.pyc`
+   - 截图目录
+   - 日志目录
+   - 导出目录
+4. 清理时优先先列出、再逐个删除，不要整目录粗暴清理
+
 ## Project Memory Bootstrap
 
 每次进入一个项目目录并准备开始编排前，先执行项目记忆检查。这个步骤优先于读取 `doc/state.json`、日志、checkpoint。
